@@ -14,7 +14,6 @@ y = np.sin(x) + 0.3*randn(N);
 y[0] = y[0]+3;
 y[5] = y[5]-10;
 
-
 tics = 2*np.pi*np.arange(0,1,0.02);
 phi = np.mat(map(mkBasis(x), np.arange(1,6)));
 
@@ -52,7 +51,7 @@ xx5 = np.array(np.transpose(wml5)*np.mat(map(mkBasis(tics), np.arange(1,6))));
 fig1 = plt.figure()
 lw = 2 #line width
 plt.xlim(0,2*np.pi)
-plt.ylim(-3,3)
+plt.ylim(-5,3)
 plt.legend()
 plt.plot(x,y, 'ro', ms=10)
 plt.plot(tics,np.sin(tics), linewidth=lw, label="sin")
