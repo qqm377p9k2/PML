@@ -30,6 +30,3 @@ plt.plot(tics,xx[0], linewidth=lw);
 plt.show()
 #print(y)
 #print(xx[0])
-
-
-
