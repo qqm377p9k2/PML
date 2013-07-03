@@ -25,7 +25,7 @@ phi = np.mat(map(mkBasis(x), np.arange(M)+1));
 
 for i in range(training_steps):
     imod = np.mod(i,N);
-    wml = wml + 0.00000000001*np.sum(np.mat(np.array(y - np.transpose(wml)*phi)*np.array(phi)),1);
+    wml = wml + 1e-11*np.sum(np.mat(np.array(y - np.transpose(wml)*phi)*np.array(phi)),1);
     #wml = wml + 0.01*(y[imod] - np.transpose(wml)*phi)*phi;
     #wml = wml + 0.0000001*twphi[0,0]*phi;
     #print(wml)
