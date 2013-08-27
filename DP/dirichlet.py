@@ -1,10 +1,27 @@
 import numpy as np
 import random
+import math
+import operator
 import matplotlib.pyplot as plt
+
+def prod(iterable):
+    return reduce(operator.mul, iterable, 1)
 
 def sampleDirichlet(params):
     sample = [random.gammavariate(a,1) for a in params]
     return [v/sum(sample) for v in sample]
+
+def PDFDirichlet(mu, params):
+    """
+    the probability density function 
+    of the dirichlet distribution
+    """
+    assert(len(mu)==len(params))
+    pstr = prod(map(math.pow, mu, 
+                    map(lambda x: x-1, params)))
+    Z = prod([math.gamma(a) for a in params])/math.gamma(sum(params))
+    return pstr/Z
+
 
 def npSampleDirichlet(params, size=None):
     params = np.array(params)
@@ -26,8 +43,46 @@ def npSampleDirichlet(params, size=None):
         assert(size!=None)
         sample = np.random.gamma(params, 1.0, size)
     return sample/np.sum(sample, axis=0)
+
+vgamma = np.vectorize(math.gamma)
+
+def factorial(n):
+    def fact(i, prod): 
+        if i > 0:
+            return fact(i-1, prod*i)
+        else:
+            return prod
+    return fact(n,1)
+
+def logGamma(x):
+    if x < 170:
+        return math.log(math.gamma(x))
+    else:
+        return (x-1)*math.log(x-1) - (x-1) + 0.5*math.log(2*math.pi*(x-1))
       
+def npPDFDirichlet(mu, params):
+    mu = np.array(mu)
+    params = np.array(params)
+    assert(len(mu)==len(params))
+    assert(sum(mu)==1)
+    pstr = np.product(mu**(params-1))
+    Z = np.product(vgamma(params))/math.gamma(sum(params))
+    return pstr/Z
+
+def npLogPDFDirichlet(mu, params):
+    mu = np.array(mu)
+    params = np.array(params)
+    assert(len(mu)==len(params))
+    assert(sum(mu)==1)
+    logPstr = np.sum((params-1)*np.log(mu))
+    logZ = np.sum(log(vgamma(params))) - logGamma(np.sum(params))
+    return logPstr - logZ
+
+
 def main():
+    #
+    print(logGamma(501)-math.log(factorial(500)))
+    #
     noSamples = 300;
     plt.subplots_adjust(hspace=0.4)
     tran = np.array([np.array([1,-1,0])/np.sqrt(2),np.array([-1,-1,2])/np.sqrt(6)])
@@ -61,7 +116,9 @@ def main():
     samples = npSampleDirichlet([1,1,2],(3,noSamples))
     samples = np.dot(tran, samples)
     plt.scatter(samples[0,:], samples[1,:])
+    #
     plt.show()
+
 
 
 if __name__=="__main__":
