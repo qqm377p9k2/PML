@@ -47,6 +47,10 @@ def npSampleDirichlet(params, size=None):
 vgamma = np.vectorize(math.gamma)
 
 def factorial(n):
+    """
+    Compute the factorial of a number
+    This function is used to test the accuracy of logGamma function
+    """
     def fact(i, prod): 
         if i > 0:
             return fact(i-1, prod*i)
@@ -55,6 +59,7 @@ def factorial(n):
     return fact(n,1)
 
 def logGamma(x):
+    """approximate log(gamma(x)) for large x by using Stirling's approximation """
     if x < 170:
         return math.log(math.gamma(x))
     else:
