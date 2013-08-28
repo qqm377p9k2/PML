@@ -22,7 +22,7 @@ class drawSmall:
         assert(self.alpha>0)
         data = self.processData(data)
         for i in range(len(data)):
-            print(repr(i)+'\t')
+            #print(repr(i)+'\t')
             post = self.posterior(data[i])
             table = np.random.multinomial(1, post)
             if table[-1] == 1:       #a new table is organized and guide the customer
@@ -52,10 +52,13 @@ class drawSmall:
         posterior=np.zeros(self.noClusters+1)
         posterior[:-1] = np.array(likelihood)* np.array(self.cnts)
         posterior[-1] = self.alpha
-        posterior = [pos/sum(posterior) for pos in posterior]
-        print(posterior)
-        assert(sum(posterior)-1<1e-10)
-        return np.array(posterior)
+        posterior = posterior/np.sum(posterior)
+        assert(np.sum(posterior)-1<1e-10)
+        return posterior
+
+    def prior(self):
+        cnts = np.array(self.cnts, dtype='float')
+        return cnts/np.sum(cnts)
 
 def extractData():
     """
@@ -71,10 +74,12 @@ def extractData():
 
 def main():
     #diri.npSampleDirichlet(1,(10,20))
-    draw = drawSmall()
+    draw = drawSmall(alpha=1e262)
     data = extractData()
     for i in range(10):
-        print('Iteration'+repr(i)+'\n')
+        print('Iteration '+repr(i))
+        print('noClusters '+repr(draw.noClusters))
+        print(repr(draw.prior()))
         draw.CRP(data)
     return draw
 
