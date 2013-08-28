@@ -12,25 +12,25 @@ class draw:
 
 class drawSmall:
     """A draw from a diriclet process only with relatively small number of words"""
+    noClusters = 0;
     cnts = []
     theta = []
     alpha = 0.1
     noWords = 150
+
     def CRP(self, data):
         assert(self.alpha>0)
         data = self.processData(data)
         for i in range(len(data)):
             print(repr(i)+'\t')
-            while True:
-                post = self.posterior(data[i])
-                print(post)
-                table = np.random.multinomial(1, post)
-                if table[-1] == 1:       #a new table is organized
-                    self.cnts.append(0)
-                    self.theta.append(diri.npSampleDirichlet(1,self.noWords))
-                else:                    #guide the customer to the prefered table and exit while
-                    self.cnts += table[:-1]
-                    break
+            post = self.posterior(data[i])
+            table = np.random.multinomial(1, post)
+            if table[-1] == 1:       #a new table is organized and guide the customer
+                self.noClusters += 1
+                self.cnts.append(1)
+                self.theta.append(diri.npSampleDirichlet(1,self.noWords))
+            else:                    #guide the customer to the prefered table and exit while
+                self.cnts[int(table.nonzero()[0])] += 1
 
     def __init__(self, alpha=0.1):
         self.alpha = alpha
@@ -49,10 +49,12 @@ class drawSmall:
         assert(np.min(samples)==0)
         assert(np.sum(samples)==1)
         likelihood = [diri.npPDFDirichlet(t, samples+1) for t in self.theta]
-        posterior = np.array(likelihood)* np.array(self.cnts)
-        posterior = [pos/(sum(posterior)+self.alpha) for pos in posterior]
-        posterior.append(self.alpha/(sum(posterior)+self.alpha))
-        assert(sum(posterior)==1)
+        posterior=np.zeros(self.noClusters+1)
+        posterior[:-1] = np.array(likelihood)* np.array(self.cnts)
+        posterior[-1] = self.alpha
+        posterior = [pos/sum(posterior) for pos in posterior]
+        print(posterior)
+        assert(sum(posterior)-1<1e-10)
         return np.array(posterior)
 
 def extractData():
