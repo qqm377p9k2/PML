@@ -38,10 +38,10 @@ class drawSmall:
         assert(max(data)<self.noWords)
         assert(min(data)>=0)
         matrix = np.arange(self.noWords)
-        return [element == matrix for element in data] #convert data to 1-of-10 expression
+        return [element == matrix for element in data] #convert data to 1-of-K expression
 
     def posterior(self, samples):
-        """samples are in 1-of-10 expression"""
+        """samples are in 1-of-K expression"""
         samples = np.array(samples)
         assert(len(samples.shape) == 1)
         assert(np.max(samples)==1)
