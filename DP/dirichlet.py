@@ -4,24 +4,22 @@ import math
 import operator
 import matplotlib.pyplot as plt
 
-def prod(iterable):
-    return reduce(operator.mul, iterable, 1)
+class dirichletDist:
+    def __init__(self, params):
+        assert(isinstance(params, (list, tuple, np.ndarray)))
+        params = np.array(params)
+        assert(len(params.shape)==1)
+        self.params = params
+        
+    def sample(self, size=1):
+        return npSampleDirichlet(self.params, size=(len(params), size))
 
-def sampleDirichlet(params):
-    sample = [random.gammavariate(a,1) for a in params]
-    return [v/sum(sample) for v in sample]
+    def pdf(self, mu):
+        pass
 
-def PDFDirichlet(mu, params):
-    """
-    the probability density function 
-    of the dirichlet distribution
-    """
-    assert(len(mu)==len(params))
-    pstr = prod(map(math.pow, mu, 
-                    map(lambda x: x-1, params)))
-    Z = prod([math.gamma(a) for a in params])/math.gamma(sum(params))
-    return pstr/Z
-
+class multinominalLH:
+    def __init__(self, observation):
+        pass
 
 def npSampleDirichlet(params, size=None):
     params = np.array(params)
@@ -46,18 +44,6 @@ def npSampleDirichlet(params, size=None):
 
 vgamma = np.vectorize(math.gamma)
 
-def factorial(n):
-    """
-    Compute the factorial of a number
-    This function is used to test the accuracy of logGamma function
-    """
-    def fact(i, prod): 
-        if i > 0:
-            return fact(i-1, prod*i)
-        else:
-            return prod
-    return fact(n,1)
-
 def logGamma(x):
     """approximate log(gamma(x)) for large x by using Stirling's approximation """
     if x < 170:
@@ -69,7 +55,7 @@ def npPDFDirichlet(mu, params):
     mu = np.array(mu)
     params = np.array(params)
     assert(len(mu)==len(params))
-    assert(sum(mu)-1<0.0001)
+    assert(sum(mu)-1<1e-10)
     pstr = np.product(mu**(params-1))
     Z = np.product(vgamma(params))/math.gamma(sum(params))
     return pstr/Z
@@ -78,7 +64,7 @@ def npLogPDFDirichlet(mu, params):
     mu = np.array(mu)
     params = np.array(params)
     assert(len(mu)==len(params))
-    assert(sum(mu)==1)
+    assert(sum(mu)-1<1e-10)
     logPstr = np.sum((params-1)*np.log(mu))
     logZ = np.sum(log(vgamma(params))) - logGamma(np.sum(params))
     return logPstr - logZ
@@ -86,7 +72,7 @@ def npLogPDFDirichlet(mu, params):
 
 def main():
     #
-    print(logGamma(501)-math.log(factorial(500)))
+    print(logGamma(501)-math.log(math.factorial(500)))
     mu = npSampleDirichlet(0.1,(3,noSamples))
     print(log(npPDFDirichlet(mu, [0.1]*3)) - npLogPDFDirichlet(mu, [0.1]*3))
     #
