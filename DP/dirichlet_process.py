@@ -15,7 +15,6 @@ class drawSmall:
     noClusters = 0;
     cnts = []
     theta = []
-    alpha = 0.1
     noWords = 150
 
     def CRP(self, data):
@@ -32,8 +31,9 @@ class drawSmall:
             else:                    #guide the customer to the prefered table and exit while
                 self.cnts[int(table.nonzero()[0])] += 1
 
-    def __init__(self, alpha=0.1):
+    def __init__(self, alpha=0.1, baseDist):
         self.alpha = alpha
+        self.baseDist = baseDist
 
     def processData(self, data):
         assert(max(data)<self.noWords)
