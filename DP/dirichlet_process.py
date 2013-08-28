@@ -12,7 +12,7 @@ class draw:
     alpha = 0.1
 
 class drawSmall:
-    """A draw from a diriclet process only with relative small number of words"""
+    """A draw from a diriclet process only with relatively small number of words"""
     cnts = []
     theta = []
     alpha = 0.1
@@ -54,7 +54,7 @@ class drawSmall:
         assert(sum(posterior)==1)
         return np.array(posterior)
 
-def extractData(self):
+def extractData():
     """
     extract words from brown corpus to compose a vector expression like
     [0,1,3,1,2,0]
@@ -68,8 +68,8 @@ def extractData(self):
 
 def main():
     #diri.npSampleDirichlet(1,(10,20))
-    draw = draw10w()
-    data = draw.processData(draw.extractData())
+    draw = drawSmall()
+    data = draw.processData(extractData())
     draw.CRP(data)
 
 if __name__=="__main__":
