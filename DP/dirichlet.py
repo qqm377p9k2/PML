@@ -69,7 +69,7 @@ def npPDFDirichlet(mu, params):
     mu = np.array(mu)
     params = np.array(params)
     assert(len(mu)==len(params))
-    assert(sum(mu)==1)
+    assert(sum(mu)-1<0.0001)
     pstr = np.product(mu**(params-1))
     Z = np.product(vgamma(params))/math.gamma(sum(params))
     return pstr/Z
@@ -87,6 +87,8 @@ def npLogPDFDirichlet(mu, params):
 def main():
     #
     print(logGamma(501)-math.log(factorial(500)))
+    mu = npSampleDirichlet(0.1,(3,noSamples))
+    print(log(npPDFDirichlet(mu, [0.1]*3)) - npLogPDFDirichlet(mu, [0.1]*3))
     #
     noSamples = 300;
     plt.subplots_adjust(hspace=0.4)

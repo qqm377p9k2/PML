@@ -4,7 +4,6 @@ from nltk.corpus import brown
 import dirichlet as diri
 import matplotlib.pyplot as plt
 
-
 class draw:
     """A draw from a diriclet process """
     cnts = []
@@ -21,8 +20,11 @@ class drawSmall:
         assert(self.alpha>0)
         data = self.processData(data)
         for i in range(len(data)):
+            print(repr(i)+'\t')
             while True:
-                table = np.random.multinominal(self.posterior(data[i]))
+                post = self.posterior(data[i])
+                print(post)
+                table = np.random.multinomial(1, post)
                 if table[-1] == 1:       #a new table is organized
                     self.cnts.append(0)
                     self.theta.append(diri.npSampleDirichlet(1,self.noWords))
@@ -34,7 +36,6 @@ class drawSmall:
         self.alpha = alpha
 
     def processData(self, data):
-        assert(len(data.shape) == 1)
         assert(max(data)<self.noWords)
         assert(min(data)>=0)
         matrix = np.arange(self.noWords)
@@ -48,7 +49,7 @@ class drawSmall:
         assert(np.min(samples)==0)
         assert(np.sum(samples)==1)
         likelihood = [diri.npPDFDirichlet(t, samples+1) for t in self.theta]
-        posterior = [cnt*l for l in likelihood]
+        posterior = np.array(likelihood)* np.array(self.cnts)
         posterior = [pos/(sum(posterior)+self.alpha) for pos in posterior]
         posterior.append(self.alpha/(sum(posterior)+self.alpha))
         assert(sum(posterior)==1)
@@ -69,8 +70,11 @@ def extractData():
 def main():
     #diri.npSampleDirichlet(1,(10,20))
     draw = drawSmall()
-    data = draw.processData(extractData())
-    draw.CRP(data)
+    data = extractData()
+    for i in range(10):
+        print('Iteration'+repr(i)+'\n')
+        draw.CRP(data)
+    return draw
 
 if __name__=="__main__":
     main()
