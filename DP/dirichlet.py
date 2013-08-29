@@ -39,7 +39,7 @@ class dirichletDist:
 
     def Zpost(self, observation):
         assert(observation in range(self.dim()))
-        return 1.0/np.sum(self.__params)
+        return self.__params[observation]/np.sum(self.__params)
 
 
 def logGamma(x):
@@ -65,6 +65,8 @@ def npLogPDFDirichlet(mu, params):
 def main():
     #
     print(logGamma(501)-math.log(math.factorial(500)))
+    print(dirichletDist([1.]*15).Zpost(1))
+    print(dirichletDist([10.]*15).Zpost(1))
     #
     noSamples = 500;
     plt.subplots_adjust(hspace=0.4)
