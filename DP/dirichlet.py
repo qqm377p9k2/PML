@@ -10,16 +10,21 @@ class dirichletDist:
         params = np.array(params)
         assert(len(params.shape)==1)
         self.params = params
+        self.dim = len(params)
         
     def sample(self, size=1):
-        return npSampleDirichlet(self.params, size=(len(params), size))
+        assert(size>0)
+        if size==1:
+            return npSampleDirichlet(self.params)
+        else:
+            return npSampleDirichlet(self.params, size=(self.dim, size))
 
     def pdf(self, mu):
         pass
 
-class multinominalLH:
-    def __init__(self, observation):
-        pass
+    def Zpost(self, observation):
+        assert(observation in range(self.dim))
+        return 1.0/np.sum(self.params)
 
 def npSampleDirichlet(params, size=None):
     params = np.array(params)
@@ -50,6 +55,9 @@ def logGamma(x):
         return math.log(math.gamma(x))
     else:
         return (x-1)*math.log(x-1) - (x-1) + 0.5*math.log(2*math.pi*(x-1))
+
+def logBeta(alpha):
+    return np.sum(np.log(vgamma(alpha))) - logGamma(np.sum(alpha))
       
 def npPDFDirichlet(mu, params):
     mu = np.array(mu)
