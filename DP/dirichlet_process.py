@@ -12,46 +12,43 @@ class draw:
 
 class drawSmall:
     """A draw from a diriclet process only with relatively small number of words"""
-    noClusters = 0;
     cnts = []
     theta = []
-    noWords = 150
 
     def CRP(self, data):
         assert(self.alpha>0)
-        data = self.processData(data)
         for i in range(len(data)):
             #print(repr(i)+'\t')
             post = self.posterior(data[i])
             table = np.random.multinomial(1, post)
             if table[-1] == 1:       #a new table is organized and guide the customer
-                self.noClusters += 1
                 self.cnts.append(1)
-                self.theta.append(diri.npSampleDirichlet(1,self.noWords))
+                self.theta.append(self.baseDist.sample())
             else:                    #guide the customer to the prefered table and exit while
                 self.cnts[int(table.nonzero()[0])] += 1
 
-    def __init__(self, alpha=0.1, baseDist):
+    def __init__(self, alpha=0.1, noWords=None, baseDist=None):
         self.alpha = alpha
-        self.baseDist = baseDist
+        if noWords != None:
+            self.baseDist = diri.dirichletDist([1]*noWords)
+        elif baseDist != None:
+            self.baseDist = baseDist
+        else:
+            assert(False)
 
-    def processData(self, data):
-        assert(max(data)<self.noWords)
-        assert(min(data)>=0)
-        matrix = np.arange(self.noWords)
-        return [element == matrix for element in data] #convert data to 1-of-K expression
+    def noWords(self):
+        return self.baseDist.dim
 
-    def posterior(self, samples):
-        """samples are in 1-of-K expression"""
-        samples = np.array(samples)
-        assert(len(samples.shape) == 1)
-        assert(np.max(samples)==1)
-        assert(np.min(samples)==0)
-        assert(np.sum(samples)==1)
-        likelihood = [diri.npPDFDirichlet(t, samples+1) for t in self.theta]
-        posterior=np.zeros(self.noClusters+1)
-        posterior[:-1] = np.array(likelihood)* np.array(self.cnts)
-        posterior[-1] = self.alpha
+    def noClusters(self):
+        assert(len(self.cnts) == len(self.theta))
+        return len(self.cnts)
+
+    def posterior(self, sample):
+        """sample: index of the observed word"""
+        assert(sample in range(self.baseDist.dim))
+        posterior=np.zeros(self.noClusters()+1)
+        posterior[:-1] = np.array([t[sample] for t in self.theta])* np.array(self.cnts)
+        posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
         assert(np.sum(posterior)-1<1e-10)
         return posterior
@@ -74,11 +71,11 @@ def extractData():
 
 def main():
     #diri.npSampleDirichlet(1,(10,20))
-    draw = drawSmall(alpha=1e262)
+    draw = drawSmall(alpha=10, noWords=150)
     data = extractData()
-    for i in range(10):
+    for i in range(100):
         print('Iteration '+repr(i))
-        print('noClusters '+repr(draw.noClusters))
+        print('noClusters '+repr(draw.noClusters()))
         print(repr(draw.prior()))
         draw.CRP(data)
     return draw
