@@ -4,14 +4,8 @@ from nltk.corpus import brown
 import dirichlet as diri
 import matplotlib.pyplot as plt
 
-class draw:
-    """A draw from a diriclet process """
-    cnts = []
-    theta = []
-    alpha = 0.1
-
-class drawSmall:
-    """A draw from a diriclet process only with relatively small number of words"""
+class DPdraw:
+    """A draw from a diriclet process"""
     cnts = []
     theta = []
 
@@ -71,7 +65,7 @@ def extractData():
 
 def main():
     #diri.npSampleDirichlet(1,(10,20))
-    draw = drawSmall(alpha=10, noWords=150)
+    draw = DPdraw(alpha=10, noWords=150)
     data = extractData()
     for i in range(100):
         print('Iteration '+repr(i))
