@@ -37,7 +37,7 @@ class drawSmall:
             assert(False)
 
     def noWords(self):
-        return self.baseDist.dim
+        return self.baseDist.dim()
 
     def noClusters(self):
         assert(len(self.cnts) == len(self.theta))
@@ -45,7 +45,7 @@ class drawSmall:
 
     def posterior(self, sample):
         """sample: index of the observed word"""
-        assert(sample in range(self.baseDist.dim))
+        assert(sample in range(self.noWords()))
         posterior=np.zeros(self.noClusters()+1)
         posterior[:-1] = np.array([t[sample] for t in self.theta])* np.array(self.cnts)
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
