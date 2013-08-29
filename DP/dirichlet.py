@@ -39,7 +39,7 @@ class dirichletDist:
 
     def Zpost(self, observation):
         assert(observation in range(self.dim()))
-        return self.__params[observation]/np.sum(self.__params)
+        return float(self.__params[observation])/np.sum(self.__params)
 
 
 def logGamma(x):
