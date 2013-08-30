@@ -14,3 +14,7 @@ class normalDist(bd.baseDist):
 
     def Zpost(self, observation):
         pass
+
+    class likelihoodFun(bd.baseDist.likelihoodFun):
+        def likelihood(self, data):
+            pass
