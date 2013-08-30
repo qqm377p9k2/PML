@@ -2,6 +2,7 @@ import numpy as np
 import nltk
 from nltk.corpus import brown
 import dirichlet as diri
+import baseDist as bd
 import matplotlib.pyplot as plt
 
 class DPdraw:
