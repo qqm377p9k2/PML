@@ -40,11 +40,10 @@ class DPdraw:
     def posterior(self, sample):
         """
         computes the posterior of DP
-        sample: index of the observed word
+        sample: index of the observed word for topic learning
         """
-        assert(sample in range(self.baseDist.dim()))
         posterior=np.zeros(self.noClusters()+1)
-        posterior[:-1] = np.array([t[sample] for t in self.__theta])* np.array(self.__counts)
+        posterior[:-1] = np.array([t.likelihood(sample) for t in self.__theta])* np.array(self.__counts)
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
         assert(np.sum(posterior)-1<1e-10)
