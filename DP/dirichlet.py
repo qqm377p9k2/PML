@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 vgamma = np.vectorize(math.gamma)
 
 class dirichletDist:
+    """A class for dirichlet distribution"""
     __params = []
     __pset = []
     def __init__(self, params):

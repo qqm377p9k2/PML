@@ -9,7 +9,17 @@ class DPdraw:
     cnts = []
     theta = []
 
+    def __init__(self, alpha=0.1, noWords=None, baseDist=None):
+        self.alpha = alpha
+        if noWords != None:
+            self.baseDist = diri.dirichletDist([1]*noWords)
+        elif baseDist != None:
+            self.baseDist = baseDist
+        else:
+            assert(False)
+
     def CRP(self, data):
+        """Chinese Restaurant Process implementation"""
         assert(self.alpha>0)
         for i in range(len(data)):
             #print(repr(i)+'\t')
@@ -20,15 +30,6 @@ class DPdraw:
                 self.theta.append(self.baseDist.sample())
             else:                    #guide the customer to the prefered table and exit while
                 self.cnts[int(table.nonzero()[0])] += 1
-
-    def __init__(self, alpha=0.1, noWords=None, baseDist=None):
-        self.alpha = alpha
-        if noWords != None:
-            self.baseDist = diri.dirichletDist([1]*noWords)
-        elif baseDist != None:
-            self.baseDist = baseDist
-        else:
-            assert(False)
 
     def noWords(self):
         return self.baseDist.dim()
