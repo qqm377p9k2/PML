@@ -36,7 +36,10 @@ class DPdraw:
         return len(self.__counts)
 
     def posterior(self, sample):
-        """sample: index of the observed word"""
+        """
+        computes the posterior of DP
+        sample: index of the observed word
+        """
         assert(sample in range(self.baseDist.dim()))
         posterior=np.zeros(self.noClusters()+1)
         posterior[:-1] = np.array([t[sample] for t in self.__theta])* np.array(self.__counts)
@@ -46,8 +49,13 @@ class DPdraw:
         return posterior
 
     def prior(self):
-        cnts = np.array(self.__counts, dtype='float')
-        return cnts/np.sum(cnts)
+        """
+        computes the prior of DP
+        """
+        prior = np.zeros(self.noClusters()+1)
+        prior[:-1] = self.__counts
+        prior[-1] = self.alpha
+        return prior/np.sum(prior)
 
 def extractData():
     """
