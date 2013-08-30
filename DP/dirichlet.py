@@ -10,15 +10,18 @@ class dirichletDist:
     """A class for dirichlet distribution"""
     __params = []
     __pset = []
+
     def __init__(self, params):
         assert(isinstance(params, (list, tuple)))
         self.__params = np.array(params)
         self.__pset = set(params)
 
     def dim(self):
+        """The dimension of the distribution"""
         return len(self.__params)
 
     def sample(self, size=1):
+        """Draw samples"""
         assert(size>0)
         sample = np.zeros([self.dim(), size])
         for alpha in self.__pset:
@@ -31,6 +34,7 @@ class dirichletDist:
         return sample
 
     def pdf(self, mu):
+        """Probability Density Function"""
         mu = np.array(mu)
         assert(len(mu)==self.dim())
         assert(sum(mu)-1<1e-10)
@@ -39,6 +43,10 @@ class dirichletDist:
         return pstr/Z
 
     def Zpost(self, observation):
+        """
+        Returns the normalizing constant of the posterior,
+        \int p(observation|\mu)p(\mu) d\mu
+        """
         assert(observation in range(self.dim()))
         return float(self.__params[observation])/np.sum(self.__params)
 
