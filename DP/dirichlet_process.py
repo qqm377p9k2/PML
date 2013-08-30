@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 
 class DPdraw:
     """A draw from a diriclet process"""
-    cnts = []
-    theta = []
+    __counts = []
+    __theta = []
 
     def __init__(self, alpha=0.1, noWords=None, baseDist=None):
         self.alpha = alpha
@@ -26,27 +26,27 @@ class DPdraw:
             post = self.posterior(data[i])
             table = np.random.multinomial(1, post)
             if table[-1] == 1:       #a new table is organized and guide the customer
-                self.cnts.append(1)
-                self.theta.append(self.baseDist.sample())
+                self.__counts.append(1)
+                self.__theta.append(self.baseDist.sample())
             else:                    #guide the customer to the prefered table
-                self.cnts[int(table.nonzero()[0])] += 1
+                self.__counts[int(table.nonzero()[0])] += 1
 
     def noClusters(self):
-        assert(len(self.cnts) == len(self.theta))
-        return len(self.cnts)
+        assert(len(self.__counts) == len(self.__theta))
+        return len(self.__counts)
 
     def posterior(self, sample):
         """sample: index of the observed word"""
         assert(sample in range(self.baseDist.dim()))
         posterior=np.zeros(self.noClusters()+1)
-        posterior[:-1] = np.array([t[sample] for t in self.theta])* np.array(self.cnts)
+        posterior[:-1] = np.array([t[sample] for t in self.__theta])* np.array(self.__counts)
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
         assert(np.sum(posterior)-1<1e-10)
         return posterior
 
     def prior(self):
-        cnts = np.array(self.cnts, dtype='float')
+        cnts = np.array(self.__counts, dtype='float')
         return cnts/np.sum(cnts)
 
 def extractData():
