@@ -1,12 +1,11 @@
 import numpy as np
-import random
 import math
-import operator
 import matplotlib.pyplot as plt
+import baseDist as bd
 
 vgamma = np.vectorize(math.gamma)
 
-class dirichletDist:
+class dirichletDist(bd.baseDist):
     """A class for dirichlet distribution"""
     __params = []
     __pset = []
