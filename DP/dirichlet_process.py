@@ -17,6 +17,7 @@ class DPdraw:
             self.baseDist = baseDist
         else:
             assert(False)
+        assert(isinstance(self.baseDist, bd.baseDist))
 
     def CRP(self, data):
         """Chinese Restaurant Process implementation"""
