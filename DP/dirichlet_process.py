@@ -9,6 +9,7 @@ class DPdraw:
     """A draw from a Dirichlet process"""
     __counts = []
     __theta = []
+    __lfs = [] #likelihood functions
 
     def __init__(self, alpha=0.1, noWords=None, baseDist=None):
         self.alpha = alpha
@@ -23,13 +24,16 @@ class DPdraw:
     def CRP(self, data):
         """Chinese Restaurant Process implementation"""
         assert(self.alpha>0)
+        posteriorFun = self.posterior
         for i in range(len(data)):
             #print(repr(i)+'\t')
-            post = self.posterior(data[i])
+            post = posteriorFun(data[i])
             table = np.random.multinomial(1, post)
             if table[-1] == 1:       #a new table is organized and guide the customer
                 self.__counts.append(1)
-                self.__theta.append(self.baseDist.sample())
+                theta = self.baseDist.sample()
+                self.__theta.append(theta)
+                self.__lfs.append(theta.likelihoodFun())
             else:                    #guide the customer to the prefered table
                 self.__counts[int(table.nonzero()[0])] += 1
 
@@ -43,7 +47,7 @@ class DPdraw:
         sample: index of the observed word for topic learning
         """
         posterior=np.zeros(self.noClusters()+1)
-        posterior[:-1] = np.array([t.likelihood(sample) for t in self.__theta])* np.array(self.__counts)
+        posterior[:-1] = np.array([lf(sample) for lf in self.__lfs])* np.array(self.__counts)
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
         assert(np.sum(posterior)-1<1e-10)

@@ -29,7 +29,7 @@ class dirichletDist(bd.baseDist):
                                                                 (np.sum(idcs),size))
         sample = sample/np.sum(sample, axis=0)
         if size==1:
-            sample = self.likelihoodFun(sample[:,0])
+            sample = self.likelihood(sample[:,0])
         return sample
 
     def pdf(self, mu):
@@ -49,16 +49,19 @@ class dirichletDist(bd.baseDist):
         assert(observation in range(self.dim()))
         return float(self.__params[observation])/np.sum(self.__params)
 
-    class likelihoodFun(bd.baseDist.likelihoodFun):
+    class likelihood(bd.baseDist.likelihood):
         def __init__(self, mu):
             self.__mu = mu
 
         def dim(self):
             return len(self.__mu)
 
-        def likelihood(self, data):
-            assert(data in range(self.dim()))
+        def computeL(self, data):
+            assert(data in range(self.dim))
             return self.__mu[data]
+
+        def likelihoodFun(self):
+            return lambda data: self.__mu[data]
 
 def logGamma(x):
     """approximate log(gamma(x)) for large x by using Stirling's approximation """

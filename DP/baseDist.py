@@ -10,5 +10,5 @@ class baseDist:
     def Zpost(self, observation):
         pass
 
-    class likelihoodFun:
+    class likelihood:
         pass
