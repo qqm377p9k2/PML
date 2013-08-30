@@ -5,7 +5,7 @@ import dirichlet as diri
 import matplotlib.pyplot as plt
 
 class DPdraw:
-    """A draw from a diriclet process"""
+    """A draw from a Dirichlet process"""
     __counts = []
     __theta = []
 
@@ -59,7 +59,7 @@ class DPdraw:
 
 def extractData():
     """
-    extract words from brown corpus to compose a vector expression like
+    extract words from Brown corpus to compose a vector expression like
     [0,1,3,1,2,0]
     """
     news_text = brown.words(categories="news")
@@ -70,7 +70,6 @@ def extractData():
 
 
 def main():
-    #diri.npSampleDirichlet(1,(10,20))
     draw = DPdraw(alpha=10, noWords=150)
     data = extractData()
     for i in range(100):
