@@ -1,15 +1,11 @@
 import numpy as np
 import nltk
-from nltk.corpus import brown
 import dirichlet as diri
 import baseDist as bd
 import matplotlib.pyplot as plt
 
 class DPdraw:
     """A draw from a Dirichlet process"""
-    __counts = []
-    __theta = []
-    __lfs = [] #likelihood functions
 
     def __init__(self, alpha=0.1, noWords=None, baseDist=None):
         self.alpha = alpha
@@ -17,9 +13,11 @@ class DPdraw:
             self.baseDist = diri.dirichletDist([1]*noWords)
         elif baseDist != None:
             self.baseDist = baseDist
+            noWords = baseDist.dim()
         else:
             assert(False)
         assert(isinstance(self.baseDist, bd.baseDist))
+        self.__lfs = diri.dirichletDist.lFunSet(noWords) #likelihood functions
 
     def CRP(self, data):
         """Chinese Restaurant Process implementation"""
@@ -30,16 +28,12 @@ class DPdraw:
             post = posteriorFun(data[i])
             table = np.random.multinomial(1, post)
             if table[-1] == 1:       #a new table is organized and guide the customer
-                self.__counts.append(1)
-                theta = self.baseDist.sample()
-                self.__theta.append(theta)
-                self.__lfs.append(theta.likelihoodFun())
+                self.__lfs.append(self.baseDist.samplePost(data[i]))
             else:                    #guide the customer to the prefered table
-                self.__counts[int(table.nonzero()[0])] += 1
+                self.__lfs.countUp(int(table.nonzero()[0]))
 
     def noClusters(self):
-        assert(len(self.__counts) == len(self.__theta))
-        return len(self.__counts)
+        return self.__lfs.length()
 
     def posterior(self, sample):
         """
@@ -47,41 +41,42 @@ class DPdraw:
         sample: index of the observed word for topic learning
         """
         posterior=np.zeros(self.noClusters()+1)
-        posterior[:-1] = np.array([lf(sample) for lf in self.__lfs])* np.array(self.__counts)
+        posterior[:-1] = self.__lfs.lFunVals(sample) * self.__lfs.counter()
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
-        assert(np.sum(posterior)-1<1e-10)
+        assert(bd.ispv(posterior))
         return posterior
+
+    def theta(self, table):
+        return self.__lfs.theta(table)
 
     def prior(self):
         """
         computes the prior of DP
         """
         prior = np.zeros(self.noClusters()+1)
-        prior[:-1] = self.__counts
+        prior[:-1] = self.__lfs.counter()
         prior[-1] = self.alpha
         return prior/np.sum(prior)
 
-def extractData():
-    """
-    extract words from Brown corpus to compose a vector expression like
-    [0,1,3,1,2,0]
-    """
-    news_text = brown.words(categories="news")
-    fdist = nltk.FreqDist([w.lower() for w in news_text])
-    words = fdist.samples()[10:6000:40]
-    data = [w for w in news_text if w in words]
-    return  [words.index(d) for d in data]
-
 
 def main():
-    draw = DPdraw(alpha=10, noWords=150)
-    data = extractData()
+    doc = diri.document()
+    words = doc.words()
+    print('datasz ' + repr(len(doc.data())))
+    #counts = [np.sum(np.array(np.array(doc.data())==w)) for w in range(len(words))]
+    #counts = [float(c)/max(counts) for c in counts]
+    #draw = DPdraw(alpha=10, baseDist=diri.dirichletDist(counts))
+    draw = DPdraw(alpha=1000, baseDist=diri.dirichletDist([1.]*len(words)))
     for i in range(100):
         print('Iteration '+repr(i))
         print('noClusters '+repr(draw.noClusters()))
-        print(repr(draw.prior()))
-        draw.CRP(data)
+        #print(repr(draw.prior()))
+        popularTables = np.argsort(draw.prior())[:-50:-1]
+        draw.CRP(doc.data())
+        for table in popularTables:
+            print(repr(draw.prior()[table]) + '\t: ' + '\t\t'.join([words[widx] for widx in np.argsort(draw.theta(table))[:-7:-1]]))
+
     return draw
 
 if __name__=="__main__":

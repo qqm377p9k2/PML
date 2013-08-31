@@ -1,5 +1,7 @@
 import numpy as np
 import math
+import nltk
+from nltk.corpus import brown
 import matplotlib.pyplot as plt
 import baseDist as bd
 
@@ -29,14 +31,30 @@ class dirichletDist(bd.baseDist):
                                                                 (np.sum(idcs),size))
         sample = sample/np.sum(sample, axis=0)
         if size==1:
-            sample = self.likelihood(sample[:,0])
+            sample = sample[:,0]
         return sample
+
+    def samplePost(self, obs, size=1):
+        """Draw samples"""
+        assert(size>0)
+        params = self.__params
+        params[obs] += 1
+        sample = np.zeros([self.dim(), size])
+        for alpha in set(params):
+            idcs = params == alpha
+            sample[np.ix_(idcs, range(size))] = np.random.gamma(alpha,1.0,
+                                                                (np.sum(idcs),size))
+        sample = sample/np.sum(sample, axis=0)
+        if size==1:
+            sample = sample[:,0]
+        return sample
+
 
     def pdf(self, mu):
         """Probability Density Function"""
         mu = np.array(mu)
         assert(len(mu)==self.dim())
-        assert(sum(mu)-1<1e-10)
+        assert(bd.ispv(mu))
         pstr = np.product(mu**(self.__params-1))
         Z = np.product(vgamma(self.__params))/math.gamma(np.sum(self.__params))
         return pstr/Z
@@ -49,19 +67,66 @@ class dirichletDist(bd.baseDist):
         assert(observation in range(self.dim()))
         return float(self.__params[observation])/np.sum(self.__params)
 
-    class likelihood(bd.baseDist.likelihood):
-        def __init__(self, mu):
-            self.__mu = mu
+    class lFunSet():
+        """set of likelihood functions"""
+        __allocUnit = 1000
+        def __init__(self, dim, size=1000):
+            self.__record = np.zeros((dim, size))
+            self.__counter= np.zeros(size)
+            self.__pointer = 0
 
-        def dim(self):
-            return len(self.__mu)
+            
+        def append(self, theta):
+            assert(bd.ispv(theta))
+            if not(self.__pointer in range(self.__record.shape[1])):
+                self.__record = np.concatenate([self.__record, np.zeros((self.__record.shape[0], self.__allocUnit))], axis=1)
+                self.__counter= np.concatenate([self.__counter,np.zeros(self.__allocUnit)])
+            self.__record[:,self.__pointer] = theta
+            self.__counter[self.__pointer] = 1.0
+            self.__pointer += 1
+           
+        def countUp(self, tableIdx):
+            assert(tableIdx in range(self.__pointer))
+            self.__counter[tableIdx] += 1
 
-        def computeL(self, data):
-            assert(data in range(self.dim))
-            return self.__mu[data]
+        def counter(self):
+            return self.__counter[:self.__pointer]
+            
+        def length(self):
+            return self.__pointer
 
-        def likelihoodFun(self):
-            return lambda data: self.__mu[data]
+        def theta(self, table):
+            if table in range(self.__pointer):
+                return self.__record[:,table]
+            else:
+                return None
+
+        def lFunTables(self):
+            return self.__record[:,:self.__pointer]
+
+        def lFunVals(self, sample):
+            assert(sample in range(self.__record.shape[0]))
+            return self.__record[sample, range(self.__pointer)]
+
+class document:
+    """
+    extract words from Brown corpus to compose a vector expression like
+    [0,1,3,1,2,0]
+    """
+    def __init__(self):
+        #text = [w.lower() for w in brown.words(categories="news")]
+        #text = [w.lower() for w in brown.words()]
+        #text = [w[0].lower() for w in brown.tagged_words(categories="news", simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
+        text = [w[0].lower() for w in brown.tagged_words(simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
+        fdist = nltk.FreqDist(text)
+        self.__fdist = fdist
+        self.__words = fdist.samples()
+        self.__data  = [self.__words.index(d) for d in [w for w in text if w in self.__words]]
+    def words(self):
+        return self.__words
+    def data(self):
+        return self.__data
+
 
 def logGamma(x):
     """approximate log(gamma(x)) for large x by using Stirling's approximation """
@@ -77,7 +142,7 @@ def npLogPDFDirichlet(mu, params):
     mu = np.array(mu)
     params = np.array(params)
     assert(len(mu)==len(params))
-    assert(sum(mu)-1<1e-10)
+    assert(bd.ispv(mu))
     logPstr = np.sum((params-1)*np.log(mu))
     logZ = np.sum(log(vgamma(params))) - logGamma(np.sum(params))
     return logPstr - logZ
