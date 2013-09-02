@@ -1,6 +1,5 @@
 import numpy as np
 import nltk
-import dirichlet as diri
 import baseDist as bd
 import matplotlib.pyplot as plt
 
@@ -38,7 +37,7 @@ class DPdraw:
         sample: index of the observed word for topic learning
         """
         posterior=np.zeros(self.noClusters()+1)
-        posterior[:-1] = self.__lfs.lFunVals(sample) * self.__lfs.counter()
+        posterior[:-1] = self.__lfs.compute(sample) * self.__lfs.counter()
         posterior[-1] = self.alpha * self.baseDist.Zpost(sample)
         posterior = posterior/np.sum(posterior)
         assert(bd.ispv(posterior))
@@ -56,28 +55,11 @@ class DPdraw:
         prior[-1] = self.alpha
         return prior/np.sum(prior)
 
+    def likelihoodFunctions(self):
+        return self.__lfs
 
 def main():
-    doc = diri.document()
-    words = doc.words()
-    print('datasz ' + repr(len(doc.data())))
-    #counts = [np.sum(np.array(np.array(doc.data())==w)) for w in range(len(words))]
-    #counts = [float(c)/max(counts) for c in counts]
-    #draw = DPdraw(alpha=10, baseDist=diri.dirichletDist(counts))
-    draw = DPdraw(alpha=3, baseDist=diri.dirichletDist([1.]*len(words)))
-    for i in range(100):
-        print('Iteration '+repr(i))
-        #print(repr(draw.prior()))
-        draw.CRP(doc.data())
-        print('noClusters '+repr(draw.noClusters()))
-        popularTables = np.argsort(draw.prior())[:-50:-1]
-        for table in popularTables:
-            if isinstance(draw.theta(table),np.ndarray):
-                freqwIdx = np.argsort(draw.theta(table))[:-7:-1]
-                freqw = [words[widx] for widx in freqwIdx]
-                print(repr(draw.prior()[table]) + '\t: ' + '\t\t'.join(freqw))
-
-    return draw
+    pass
 
 if __name__=="__main__":
     main()

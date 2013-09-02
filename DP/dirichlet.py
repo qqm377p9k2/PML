@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import nltk
+import dirichlet_process as DP
 from nltk.corpus import brown
 import matplotlib.pyplot as plt
 import baseDist as bd
@@ -84,7 +85,7 @@ class dirichletDist(bd.baseDist):
             self.__counter[self.__pointer] = 1.0
             self.__pointer += 1
            
-        def lFunVals(self, sample):
+        def compute(self, sample):
             assert(sample in range(self.__record.shape[0]))
             return self.__record[sample, range(self.__pointer)]
 
@@ -139,7 +140,7 @@ def npLogPDFDirichlet(mu, params):
     return logPstr - logZ
 
 
-def main():
+def main0():
     #
     print(logGamma(501)-math.log(math.factorial(500)))
     print(dirichletDist([1.]*15).Zpost(1))
@@ -181,6 +182,33 @@ def main():
     #
     plt.show()
 
+
+def main():
+    doc = document()
+    words = doc.words()
+    print('datasz ' + repr(len(doc.data())))
+    #counts = [np.sum(np.array(np.array(doc.data())==w)) for w in range(len(words))]
+    #counts = [float(c)/max(counts) for c in counts]
+    #draw = DPdraw(alpha=10, baseDist=diri.dirichletDist(counts))
+    draw = DP.DPdraw(alpha=3, baseDist=dirichletDist([1.]*len(words)))
+    for i in range(100):
+        print('Iteration '+repr(i))
+        #print(repr(draw.prior()))
+        draw.CRP(doc.data())
+        print('noClusters '+repr(draw.noClusters()))
+        popularTables = np.argsort(draw.prior())[:-50:-1]
+        wList = [[words[widx] 
+                  for widx in np.argsort(draw.theta(table))[:-7:-1]]
+                 for table in popularTables 
+                 if isinstance(draw.theta(table),np.ndarray)]
+        popularity = [draw.prior()[table] for table in popularTables 
+                      if isinstance(draw.theta(table),np.ndarray)]
+        colLen = [max(len(c) for c in b) for b in zip(*wList)]
+        for row,prb in zip(wList, popularity):
+            print(repr(prb) + 
+                  '\t: ' + 
+                  ' '.join(s.ljust(l) for s,l in zip(row, colLen)))
+    return draw
 
 
 if __name__=="__main__":
