@@ -7,17 +7,14 @@ import matplotlib.pyplot as plt
 class DPdraw:
     """A draw from a Dirichlet process"""
 
-    def __init__(self, alpha=0.1, noWords=None, baseDist=None):
+    def __init__(self, alpha=0.1, baseDist=None):
         self.alpha = alpha
-        if noWords != None:
-            self.baseDist = diri.dirichletDist([1]*noWords)
-        elif baseDist != None:
+        if baseDist != None:
             self.baseDist = baseDist
-            noWords = baseDist.dim()
         else:
             assert(False)
         assert(isinstance(self.baseDist, bd.baseDist))
-        self.__lfs = diri.dirichletDist.lFunSet(noWords) #likelihood functions
+        self.__lfs = baseDist.lFunSet(baseDist) #likelihood functions
 
     def CRP(self, data):
         """Chinese Restaurant Process implementation"""
@@ -67,15 +64,18 @@ def main():
     #counts = [np.sum(np.array(np.array(doc.data())==w)) for w in range(len(words))]
     #counts = [float(c)/max(counts) for c in counts]
     #draw = DPdraw(alpha=10, baseDist=diri.dirichletDist(counts))
-    draw = DPdraw(alpha=1000, baseDist=diri.dirichletDist([1.]*len(words)))
+    draw = DPdraw(alpha=3, baseDist=diri.dirichletDist([1.]*len(words)))
     for i in range(100):
         print('Iteration '+repr(i))
-        print('noClusters '+repr(draw.noClusters()))
         #print(repr(draw.prior()))
-        popularTables = np.argsort(draw.prior())[:-50:-1]
         draw.CRP(doc.data())
+        print('noClusters '+repr(draw.noClusters()))
+        popularTables = np.argsort(draw.prior())[:-50:-1]
         for table in popularTables:
-            print(repr(draw.prior()[table]) + '\t: ' + '\t\t'.join([words[widx] for widx in np.argsort(draw.theta(table))[:-7:-1]]))
+            if isinstance(draw.theta(table),np.ndarray):
+                freqwIdx = np.argsort(draw.theta(table))[:-7:-1]
+                freqw = [words[widx] for widx in freqwIdx]
+                print(repr(draw.prior()[table]) + '\t: ' + '\t\t'.join(freqw))
 
     return draw
 

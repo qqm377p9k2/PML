@@ -2,19 +2,66 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import baseDist as bd
-
+import dirichlet_process as DP
 
 class normalDist(bd.baseDist):
     def __init__(self, mean=0, cov=1):
         self.mean = mean
         self.cov = cov
 
-    def sample(self):
-        pass
+    def samplePost(self, obs):
+        return math.sqrt(self.cov)/math.sqrt(1+self.cov)*np.random.randn() + (self.mean + self.cov*obs)/(1+self.cov)
 
-    def Zpost(self, observation):
-        pass
+    def Zpost(self, obs):
+        return math.exp(-0.5*((obs-self.mean)**2)/(1+self.cov))/math.sqrt(2*math.pi*(1+self.cov))
 
-    class likelihoodFun(bd.baseDist.likelihoodFun):
-        def likelihood(self, data):
-            pass
+    class lFunSet(bd.baseDist.lFunSet):
+        """set of likelihood functions"""
+        __allocUnit = 1000
+        def __init__(self, dist, size=1000):
+            self.__centers = np.zeros(size)
+            self.__counter= np.zeros(size)
+            self.__pointer = 0
+
+        def append(self, theta):
+            if not(self.__pointer in range(self.__counter.shape[0])):
+                self.__centers= np.concatenate([self.__centers,np.zeros(self.__allocUnit)])
+                self.__counter= np.concatenate([self.__counter,np.zeros(self.__allocUnit)])
+            self.__centers[self.__pointer] = theta
+            self.__counter[self.__pointer] = 1.0
+            self.__pointer += 1
+           
+        def lFunVals(self, obs):
+            return np.exp(-0.5*(obs-self.__centers[range(self.__pointer)])**2)/math.sqrt(2*math.pi)
+
+        def theta(self, table):
+            if table in range(self.__pointer):
+                return self.__centers[table]
+            else:
+                return False
+
+def dataGen():
+    biases = np.concatenate([np.zeros(200), -8.*np.ones(400), 8.*np.ones(600)])
+    np.random.shuffle(biases)
+    return biases + np.random.randn(len(biases))
+
+
+def main():
+    data = dataGen()
+    h, b = np.histogram(data, bins=50)
+    c = (b[:-1] + b[1:])/2
+    draw = DP.DPdraw(alpha=2, baseDist=normalDist(cov=10))
+    for i in range(1000):
+        print('Iteration '+repr(i))
+        draw.CRP(data)
+        print('noClusters '+repr(draw.noClusters()))
+        popularTables = np.argsort(draw.prior())[:-10:-1]
+        for table in popularTables:
+            if draw.theta(table):
+                print(repr(draw.prior()[table]) + ': ' + repr(draw.theta(table)))
+    x = np.arange(-20:20:0.1)
+    y = 
+    plt.show()
+
+if __name__=="__main__":
+    main()

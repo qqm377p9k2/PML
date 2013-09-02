@@ -67,15 +67,14 @@ class dirichletDist(bd.baseDist):
         assert(observation in range(self.dim()))
         return float(self.__params[observation])/np.sum(self.__params)
 
-    class lFunSet():
+    class lFunSet(bd.baseDist.lFunSet):
         """set of likelihood functions"""
         __allocUnit = 1000
-        def __init__(self, dim, size=1000):
-            self.__record = np.zeros((dim, size))
+        def __init__(self, dist, size=1000):
+            self.__record = np.zeros((dist.dim(), size))
             self.__counter= np.zeros(size)
             self.__pointer = 0
 
-            
         def append(self, theta):
             assert(bd.ispv(theta))
             if not(self.__pointer in range(self.__record.shape[1])):
@@ -85,28 +84,19 @@ class dirichletDist(bd.baseDist):
             self.__counter[self.__pointer] = 1.0
             self.__pointer += 1
            
-        def countUp(self, tableIdx):
-            assert(tableIdx in range(self.__pointer))
-            self.__counter[tableIdx] += 1
-
-        def counter(self):
-            return self.__counter[:self.__pointer]
-            
-        def length(self):
-            return self.__pointer
+        def lFunVals(self, sample):
+            assert(sample in range(self.__record.shape[0]))
+            return self.__record[sample, range(self.__pointer)]
 
         def theta(self, table):
             if table in range(self.__pointer):
                 return self.__record[:,table]
             else:
-                return None
+                return False
 
         def lFunTables(self):
             return self.__record[:,:self.__pointer]
 
-        def lFunVals(self, sample):
-            assert(sample in range(self.__record.shape[0]))
-            return self.__record[sample, range(self.__pointer)]
 
 class document:
     """
@@ -116,8 +106,9 @@ class document:
     def __init__(self):
         #text = [w.lower() for w in brown.words(categories="news")]
         #text = [w.lower() for w in brown.words()]
-        #text = [w[0].lower() for w in brown.tagged_words(categories="news", simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
-        text = [w[0].lower() for w in brown.tagged_words(simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
+        text = [w[0].lower() for w in brown.tagged_words(categories="news", simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
+        #text = [w[0].lower() for w in brown.tagged_words(simplify_tags=True) if (w[1]=='NP') | (w[1]=='N')]
+        #text = text[np.random.permutation(range(len(text)))[:30000]]
         fdist = nltk.FreqDist(text)
         self.__fdist = fdist
         self.__words = fdist.samples()

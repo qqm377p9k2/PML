@@ -15,5 +15,14 @@ class baseDist:
     def Zpost(self, observation):
         pass
 
-    class likelihood:
-        pass
+    class lFunSet:
+        def countUp(self, tableIdx):
+            assert(tableIdx in range(self.__pointer))
+            self.__counter[tableIdx] += 1
+
+        def counter(self):
+            return self.__counter[:self.__pointer]
+            
+        def length(self):
+            return self.__pointer
+
