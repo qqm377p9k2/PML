@@ -31,7 +31,7 @@ class normalDist(bd.baseDist):
             self.__counter[self.__pointer] = 1.0
             self.__pointer += 1
            
-        def lFunVals(self, obs):
+        def compute(self, obs):
             return np.exp(-0.5*(obs-self.__centers[range(self.__pointer)])**2)/math.sqrt(2*math.pi)
 
         def theta(self, table):
@@ -50,8 +50,8 @@ def main():
     data = dataGen()
     h, b = np.histogram(data, bins=50)
     c = (b[:-1] + b[1:])/2
-    draw = DP.DPdraw(alpha=2, baseDist=normalDist(cov=10))
-    for i in range(1000):
+    draw = DP.DPdraw(alpha=1, baseDist=normalDist(cov=10))
+    for i in range(20):
         print('Iteration '+repr(i))
         draw.CRP(data)
         print('noClusters '+repr(draw.noClusters()))
@@ -59,8 +59,10 @@ def main():
         for table in popularTables:
             if draw.theta(table):
                 print(repr(draw.prior()[table]) + ': ' + repr(draw.theta(table)))
-    x = np.arange(-20:20:0.1)
-    y = 
+    mass = draw.prior()
+    x = np.arange(-20,20,0.1)[:,None]
+    y = np.sum(draw.likelihoodFunctions().compute(x)*mass[:-1],axis=1)
+    plt.plot(x,y)
     plt.show()
 
 if __name__=="__main__":
