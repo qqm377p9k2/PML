@@ -6,16 +6,18 @@ ispv = lambda x: math.fabs(np.sum(x)-1)<1e-10
 class baseDist:
     """An abstract class for base distribution"""
     def __init__(self):
-        assert(False)   #instance of baseDist can not be made
+        raise NotImplementedError( "Should have implemented this" )
 
-    def sample(self):
-        """returns a instance of sampledDist"""
-        pass
+    def samplePost(self,obs):
+        raise NotImplementedError( "Should have implemented this" )
 
-    def Zpost(self, observation):
-        pass
+    def Zpost(self, obs):
+        raise NotImplementedError( "Should have implemented this" )
 
     class lFunSet:
+        def __init__(self, dist, size):
+            raise NotImplementedError( "Should have implemented this" )
+
         def countUp(self, tableIdx):
             assert(tableIdx in range(self.__pointer))
             self.__counter[tableIdx] += 1
@@ -26,3 +28,8 @@ class baseDist:
         def length(self):
             return self.__pointer
 
+        def compute(self, obs):
+            raise NotImplementedError( "Should have implemented this" )
+
+        def theta(self, table):
+            raise NotImplementedError( "Should have implemented this" )
