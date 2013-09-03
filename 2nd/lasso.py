@@ -6,46 +6,49 @@ import matplotlib.pyplot as plt
 from numpy.random import rand, randn
 #from numpy import linalg as LA
 
-def mkBasis(x):
-    return lambda m: np.power(x,m);
-
-M = 6;
+M = 5;
 N = 500;
-x = 2*np.pi*rand(N);
-y = np.mat(np.sin(x) + 0.3*randn(N));
-#y[0] = y[0]+3;
-#y[5] = y[5]-10;
+training_steps = 50000
+x = 2*np.pi*rand(N)
+y = np.sin(x) + 0.1*randn(N)
 
-tics = 2*np.pi*np.arange(0,1,0.02);
+wml = 0.01*randn(M)
+powers = np.arange(M,dtype=float)
+initLrate = 1e-6
+lrate = initLrate
 
-training_steps = 500000;
-wml = np.mat(randn(M,1));
-
-phi = np.mat(map(mkBasis(x), np.arange(M)+1));
+phi = np.array([np.power(x, power) for power in powers])
 print(np.shape(phi))
 
-for i in range(training_steps):
-    imod = np.mod(i,N);
-    coef = np.array(y[:, imod] - np.transpose(wml)*phi[:, imod]);
-    wml = (wml + (1e-9)*coef[0,0]*phi[:, imod]); 
-    print(wml)
-    #print(np.shape(np.mat(np.array(y[imod,:] - np.transpose(wml)*phi[imod,:])*np.array(phi))))
-    #wml = wml + (1e-11)*np.mat(np.array(y - np.transpose(wml)*phi[imod,:])*np.array(phi));
-    #wml = wml + 0.01*(y[imod] - np.transpose(wml)*phi)*phi;
-    #wml = wml + 0.0000001*twphi[0,0]*phi;
-    #print(wml)
+batchsz = 10
 
-xx = np.array(np.transpose(wml)*np.mat(map(mkBasis(tics), np.arange(M)+1)));
-y = np.array(y);
+for i in range(training_steps):
+    #lrate = initLrate * (1000./(i+1000.))
+    for datIdx in np.random.permutation(N):
+        coef = y[datIdx] - np.dot(wml,phi[:, datIdx])
+        #print(coef)
+        #print(lrate*coef*phi[:, datIdx])
+        #print(wml)
+        #print(wml + lrate*coef*phi[:, datIdx])
+        wml = wml + lrate*coef*phi[:, datIdx] #- (2e-5)*np.sign(wml)
+    err = np.sum(y - np.dot(wml,phi))**2
+    if np.mod(i,100)==0:
+        print(wml)
+        print('err: ' + repr(err))
+        if err < 10:
+            break
 
 #draw results
+tics = 2*np.pi*np.arange(0,1,0.02);
+guess = np.dot(wml, np.array([np.power(tics, power) for power in powers]))
+
 fig1 = plt.figure()
 lw = 5 #line width
 plt.xlim(0,2*np.pi)
-plt.ylim(-12,3)
-plt.plot(x,y[0], 'ro', ms=10)
+plt.ylim(-3,3)
+plt.plot(x,y, 'ro', ms=10)
 plt.plot(tics,np.sin(tics), linewidth=lw)
-plt.plot(tics,xx[0], linewidth=lw);
+plt.plot(tics,guess, linewidth=lw);
 plt.show()
 
 
