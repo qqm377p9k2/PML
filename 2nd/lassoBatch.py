@@ -8,13 +8,13 @@ from numpy.random import rand, randn
 
 M = 5;
 N = 500;
-training_steps = 50000
+training_steps = 30000
 x = 2*np.pi*rand(N)
 y = np.sin(x) + 0.1*randn(N)
 
 wml = 0.01*randn(M)
 powers = np.arange(M,dtype=float)
-initLrate = 1e-7
+initLrate = 5.0e-6
 lrate = initLrate
 
 phi = np.array([np.power(x, power) for power in powers])
@@ -22,19 +22,20 @@ print(np.shape(phi))
 
 batchsz = 10
 noBatch = N/batchsz
+alpha = 0.1
 
 for i in range(training_steps):
-    #lrate = initLrate * (10000./(i+10000.))
+    lrate = initLrate * (10000./(i+10000.))
     idcs = np.reshape(np.random.permutation(N), (noBatch,batchsz))
     for bIdx in range(noBatch):
         coef = y[idcs[bIdx,:]] - np.dot(wml,phi[:, idcs[bIdx,:]])
-        wml = wml + np.sum(lrate*coef*phi[:, idcs[bIdx,:]],axis=1) #- (2e-5)*np.sign(wml)
-    err = np.sum(y - np.dot(wml,phi))**2
+        wml = wml + lrate*(np.mean(coef*phi[:, idcs[bIdx,:]],axis=1) - alpha*np.sign(wml))
+    err = np.mean((y - np.dot(wml,phi))**2) + alpha*np.sum(wml)
     if np.mod(i,100)==0:
         print(wml)
         print('err: ' + repr(err))
-    if err < 100:
-        break
+        if err < 0.08:
+            break
 
 
 #draw results
