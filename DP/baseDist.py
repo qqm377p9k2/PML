@@ -14,7 +14,7 @@ class baseDist(object):
     def Zpost(self, obs):
         raise NotImplementedError( "Should have implemented this" )
 
-    class lFunSet:
+    class lFunSet(object):
         def __init__(self, dist, size):
             raise NotImplementedError( "Should have implemented this" )
 
