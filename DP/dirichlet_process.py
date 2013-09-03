@@ -2,7 +2,7 @@ import numpy as np
 import baseDist as bd
 import matplotlib.pyplot as plt
 
-class DPdraw:
+class DPdraw(object):
     """A draw from a Dirichlet process"""
 
     def __init__(self, alpha=0.1, baseDist=None):
