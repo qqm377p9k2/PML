@@ -3,7 +3,7 @@ import numpy as np
 
 ispv = lambda x: math.fabs(np.sum(x)-1)<1e-10
 
-class baseDist:
+class baseDist(object):
     """An abstract class for base distribution"""
     def __init__(self):
         raise NotImplementedError( "Should have implemented this" )
