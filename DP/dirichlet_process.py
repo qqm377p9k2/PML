@@ -1,5 +1,4 @@
 import numpy as np
-import nltk
 import baseDist as bd
 import matplotlib.pyplot as plt
 
