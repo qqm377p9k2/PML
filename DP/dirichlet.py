@@ -191,8 +191,8 @@ def main():
     #counts = [np.sum(np.array(np.array(doc.data())==w)) for w in range(len(words))]
     #counts = [float(c)/max(counts) for c in counts]
     #draw = DPdraw(alpha=10, baseDist=diri.dirichletDist(counts))
-    draw = DP.DPdraw(alpha=1., baseDist=dirichletDist([.01]*len(words)))
-    for i in range(100):
+    draw = DP.DPdraw(alpha=.1, baseDist=dirichletDist([.05]*len(words)))
+    for i in range(5):
         print('Iteration '+repr(i))
         #print(repr(draw.prior()))
         draw.CRP(doc.data())
