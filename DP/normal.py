@@ -40,18 +40,35 @@ class normalDist(bd.baseDist):
             else:
                 return False
 
-def dataGen():
-    biases = np.concatenate([np.zeros(200), -8.*np.ones(400), 8.*np.ones(600)])
-    np.random.shuffle(biases)
-    return biases + np.random.randn(len(biases))
+class gaussianMixture(object):
+    __N = 1000
+    def __init__(self):
+        self.__mean = np.array([0., -8., 8.])
+        self.__mu = np.array([2., 4., 6.])
+        self.__mu /= np.sum(self.__mu)
 
+    def dataGen(self):
+        biases = np.concatenate([np.zeros(200), -8.*np.ones(400), 8.*np.ones(600)])
+        np.random.shuffle(biases)
+        return biases + np.random.randn(len(biases))
 
+    def pdf(self):
+        mean = self.__mean[:,None]
+        return lambda x: np.dot(self.__mu,
+                                np.exp(-0.5*(x-mean)**2)/np.sqrt(2.*math.pi))
+        
 def main():
-    data = dataGen()
+    gm = gaussianMixture()
+    data = gm.dataGen()
     h, b = np.histogram(data, bins=50)
     c = (b[:-1] + b[1:])/2
     draw = DP.DPdraw(alpha=1, baseDist=normalDist(cov=10))
-    for i in range(20):
+
+    x = np.arange(-20,20,0.1)
+
+    MAXITR = 100
+
+    for i in range(MAXITR):
         print('Iteration '+repr(i))
         draw.CRP(data)
         print('noClusters '+repr(draw.noClusters()))
@@ -59,10 +76,13 @@ def main():
         for table in popularTables:
             if draw.theta(table):
                 print(repr(draw.prior()[table]) + ': ' + repr(draw.theta(table)))
-    mass = draw.prior()
-    x = np.arange(-20,20,0.1)[:,None]
-    y = np.sum(draw.likelihoodFunctions().compute(x)*mass[:-1],axis=1)
-    plt.plot(x,y)
+        mass = draw.prior()
+        y = np.sum(draw.likelihoodFunctions().compute(x[:,None])*mass[:-1],axis=1)
+        plt.plot(x,y,color=(float(i)/MAXITR,0,1.-float(i)/MAXITR))
+
+    plt.plot(x,gm.pdf()(x), color='green')
+    plt.scatter(data, np.zeros(len(data)), color='green')
+
     plt.show()
 
 if __name__=="__main__":
