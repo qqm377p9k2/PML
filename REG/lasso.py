@@ -1,12 +1,8 @@
-import theano
 import numpy as np
-import theano.tensor as T
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from numpy.random import rand, randn
-#from numpy import linalg as LA
 
-M = 5;
 N = 150;
 training_steps = 30000
 x = 2*np.pi*rand(N)
@@ -17,6 +13,7 @@ y[0] += 5
 x[0] = 5
 ###
 
+M = 5;
 wml = 0.01*randn(M)
 powers = np.arange(M,dtype=float)
 initLrate = 1e-6
