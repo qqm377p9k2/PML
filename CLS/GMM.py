@@ -9,12 +9,13 @@ class GMM(object):
         self.label= []
         self.dist = []
         self.__N = N
+        self.__Ns = []
         self.ratios = [1.]
 
     def append(self, dist, ratio=None):
-        assert(isinstance(dist, natDist2D))
+        assert(isinstance(dist, natDist))
         if ratio is None:
-            N = sum(array([d.N for d in self.dist]))
+            N = sum(array(self.__Ns))
             assert(N<self.__N)
             N = self.__N - N
         else:
@@ -23,44 +24,51 @@ class GMM(object):
             self.ratios.append(ratio)
             self.ratios[-2] -= ratio
             N = self.ratios[-2]*self.__N
-        dist.N = N
+        self.__Ns.append(N)
         self.dist.append(dist)
 
     def sample(self):
         assert(sum(array(self.ratios))==1.)
-        self.__data = [d.gen() for d in self.dist]
+        assert(sum(array(self.__Ns))==self.__N)
+        self.__data = [d.sample(N) for d,N in zip(self.dist, self.__Ns)]
         return self
             
     def data(self):
         return self.__data
 
     def labels(self):
-        return [ones(self.dist[i].N)*i for i in range(len(self.dist))]
+        return [ones(self.__Ns[i])*i for i in range(len(self.dist))]
 
     def mixtures(self):
         return (concatenate(self.labels()),concatenate(self.data()))
     
-class natDist2D(object):
-    def __init__(self,mu, cov, N=None):
-        self.mu = mu
-        self.cov = cov
-        self.N = N
-        
-    def gen(self):
-        assert(not(self.N is None))
-        (zvar, zrot) = linalg.eig(self.cov)
-        return dot(randn(self.N,2)*sqrt(zvar),zrot.T) + self.mu
+class natDist(object):
+    def __init__(self,mu, cov):
+        dim = mu.shape[0]
+        assert(mu.shape == (dim,))
+        assert(cov.shape == (dim,dim))
+        assert(all(cov.T == cov))
+        self.__mu = mu
+        self.__cov = cov
+        self.__dim = dim
+
+    def dim(self):
+        return self.__dim
+
+    def sample(self,N):
+        (zvar, zrot) = linalg.eig(self.__cov)
+        return dot(randn(N,self.__dim)*sqrt(zvar),zrot.T) + self.__mu
 
 
 def main():
     gmm = GMM(N=1000)
-    gmm.append(natDist2D(array([10.,10.]), 
-                         array([[3.,1.],
-                                [1.,3.]])),
+    gmm.append(natDist(array([10.,10.]), 
+                       array([[3.,1.],
+                              [1.,3.]])),
                0.5)
-    gmm.append(natDist2D(array([10.,-10.]),
-                         array([[5.,1.],
-                                [1.,5.]])))
+    gmm.append(natDist(array([10.,-10.]),
+                       array([[5.,1.],
+                              [1.,5.]])))
     gmm.sample()
     data = gmm.data()
     plt.scatter(data[0][:,0], data[0][:,1], color='blue')
