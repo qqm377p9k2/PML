@@ -6,11 +6,10 @@ from numpy.random import *
 class GMM(object):
     def __init__(self, N):
         self.__data = []
-        self.label= []
-        self.dist = []
+        self.__dists = []
         self.__N = N
         self.__Ns = []
-        self.ratios = [1.]
+        self.__ratios = [1.]
 
     def append(self, dist, ratio=None):
         assert(isinstance(dist, natDist))
@@ -20,24 +19,24 @@ class GMM(object):
             N = self.__N - N
         else:
             assert((ratio<1.) and  (ratio>0.))
-            assert(ratio<self.ratios[-1])
-            self.ratios.append(ratio)
-            self.ratios[-2] -= ratio
-            N = self.ratios[-2]*self.__N
+            assert(ratio<self.__ratios[-1])
+            self.__ratios.append(ratio)
+            self.__ratios[-2] -= ratio
+            N = self.__ratios[-2]*self.__N
         self.__Ns.append(N)
-        self.dist.append(dist)
+        self.__dists.append(dist)
 
     def sample(self):
-        assert(sum(array(self.ratios))==1.)
+        assert(sum(array(self.__ratios))==1.)
         assert(sum(array(self.__Ns))==self.__N)
-        self.__data = [d.sample(N) for d,N in zip(self.dist, self.__Ns)]
+        self.__data = [d.sample(N) for d,N in zip(self.__dists, self.__Ns)]
         return self
             
     def data(self):
         return self.__data
 
     def labels(self):
-        return [ones(self.__Ns[i])*i for i in range(len(self.dist))]
+        return [ones(self.__Ns[i])*i for i in range(len(self.__dists))]
 
     def mixtures(self):
         return (concatenate(self.labels()),concatenate(self.data()))
