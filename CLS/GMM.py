@@ -39,7 +39,10 @@ class GMM(object):
         return [ones(self.__Ns[i])*i for i in range(len(self.__dists))]
 
     def mixtures(self):
-        return (concatenate(self.labels()),concatenate(self.data()))
+        t = concatenate(self.labels())
+        x = concatenate(self.data())
+        idcs = permutation(len(t))
+        return (t[idcs],x[idcs,:])
     
 class natDist(object):
     def __init__(self,mu, cov):
@@ -68,11 +71,10 @@ def main():
     gmm.append(natDist(array([10.,-10.]),
                        array([[5.,1.],
                               [1.,5.]])))
-    gmm.sample()
-    data = gmm.data()
-    plt.scatter(data[0][:,0], data[0][:,1], color='blue')
-    plt.scatter(data[1][:,0], data[1][:,1], color='red')
-    (t,x) = gmm.mixtures()
+    
+    (t,x) = gmm.sample().mixtures()
+    colors = [['blue', 'red'][int(label)] for label in t]
+    plt.scatter(x[:,0], x[:,1], color=colors)
     plt.show()
     
 
