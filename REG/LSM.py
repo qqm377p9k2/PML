@@ -16,10 +16,16 @@ def data(N = 50, Noise=False):
 
 
 class LSMestimator(object):
-    def __init__(self, M, l=0):
+    def __init__(self, M, l=0, beta=1.):
         self.l = float(l)
         self.powers = arange(M,dtype=float)
         self.wml = None
+        self.beta = beta
+        self.__alpha = None
+
+    def setAlpha(self, alpha):
+        self.__alpha = alpha
+        self.l = float(alpha)/self.beta
 
     def order(self):
         return len(self.powers)
