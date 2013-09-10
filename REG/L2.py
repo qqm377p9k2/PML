@@ -9,7 +9,7 @@ import LSM
 def main():
     (x,y) = LSM.data()
     (xwn, ywn) = LSM.data(Noise=True)
-    lsm = LSM.LSMestimator(M=7, l=2.)
+    lsm = LSM.LSM_L2(M=7, l=2.)
     tics = 2*pi*arange(0,1,0.02);
     lw = 5 #line width
 

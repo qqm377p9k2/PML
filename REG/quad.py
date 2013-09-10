@@ -9,9 +9,9 @@ import LSM
 def main():
     (x,y) = LSM.data()
     (xwn, ywn) = LSM.data(Noise=True)
-    lsm = LSM.LSMestimator(6)
+    lsm = LSM.LSM_L2(6)
     lsm.fit(x,y)
-    lsm2 = LSM.LSMestimator(6)
+    lsm2 = LSM.LSM_L2(6)
     lsm2.fit(xwn,ywn)
     tics = 2*pi*arange(0,1,0.02);
     lw = 5 #line width

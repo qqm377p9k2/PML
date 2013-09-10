@@ -15,11 +15,23 @@ def data(N = 50, Noise=False):
     return (x,y)
 
 
-class LSMestimator(object):
-    def __init__(self, M, l=0, beta=1.):
-        self.l = float(l)
+class LSMslv(object):
+    def __init__(self, M):
         self.powers = arange(M,dtype=float)
         self.wml = None
+
+    def order(self):
+        return len(self.powers)
+        
+    def predict(self, x):
+        assert(not(self.wml is None))
+        return dot(self.wml, array([power(x, p) for p in self.powers]))
+
+
+class LSM_L2(LSMslv):
+    def __init__(self, M, l=0, beta=1.):
+        super(self.__class__, self).__init__(M)
+        self.l = float(l)
         self.beta = beta
         self.__alpha = None
 
@@ -27,23 +39,16 @@ class LSMestimator(object):
         self.__alpha = alpha
         self.l = float(alpha)/self.beta
 
-    def order(self):
-        return len(self.powers)
-
     def fit(self, x, y):
         phi = array([power(x, p) for p in self.powers]).T
         self.wml = dot(y, dot(phi,LA.inv(self.l*eye(self.order()) + dot(phi.T,phi)).T))
-
-    def predict(self, x):
-        assert(not(self.wml is None))
-        return dot(self.wml, array([power(x, p) for p in self.powers]))
 
 
 def main():
     (x,y) = data()
     (xwn, ywn) = data(Noise=True)
-    lsm = LSMestimator(M=6, l=2.)
-    lsm2 = LSMestimator(M=6, l=2.)
+    lsm = LSM_L2(M=6, l=2.)
+    lsm2 = LSM_L2(M=6, l=2.)
     lsm.fit(x,y)
     tics = 2*pi*arange(0,1,0.02);
     lw = 5 #line width
