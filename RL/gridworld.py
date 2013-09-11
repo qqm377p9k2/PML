@@ -129,7 +129,6 @@ def test():
     print(gw.availablePlaces())
         
 def main():
-    m = [0]*4
     gw = gridworld()
     a = agent(gw)
 
@@ -150,8 +149,7 @@ def main():
         Q = transpose(a.Q(), (2,0,1))
         for i in range(4):
             plt.subplot(2,2,i)
-            m[i] = plt.imshow(Q[i], interpolation='nearest')
-            m[i].set_data(Q[i])
+            plt.imshow(Q[i], interpolation='nearest')
             plt.title(a.actions()[i])
             plt.colorbar()
         plt.show()
