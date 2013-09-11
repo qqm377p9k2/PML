@@ -59,22 +59,26 @@ class natDist(object):
 
     def sample(self,N):
         (zvar, zrot) = linalg.eig(self.__cov)
-        return dot(randn(N,self.__dim)*sqrt(zvar),zrot.T) + self.__mu
+        return dot(randn(N,self.__dim)*sqrt(zvar),zrot) + self.__mu
 
 
 def main():
     gmm = GMM(N=1000)
     gmm.append(natDist(array([10.,10.]), 
-                       array([[3.,1.],
-                              [1.,3.]])),
+                       array([[5.,0.],
+                              [0.,3.]])),
                0.5)
     gmm.append(natDist(array([10.,-10.]),
-                       array([[5.,1.],
-                              [1.,5.]])))
+                       array([[5.,0.],
+                              [0.,5.]])))
     
     (t,x) = gmm.sample().mixtures()
     colors = [['blue', 'red'][int(label)] for label in t]
     plt.scatter(x[:,0], x[:,1], color=colors)
+    dat = gmm.data();
+    for i in range(len(dat)):
+        nd = dat[i]-mean(dat[i],axis=0)
+        print(dot(nd.T, nd)/nd.shape[0])
     plt.show()
     
 
