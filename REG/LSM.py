@@ -4,14 +4,19 @@ import matplotlib.pyplot as plt
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
-def data(N = 50, Noise=False):
+def data(N = 50, Noise=False, NL=0.2):
     x = 2*pi*rand(N)
-    y = sin(x) + 0.2*randn(N)
-    if Noise:
+    y = sin(x) + NL*randn(N)
+    if Noise == True:
+        Noise == 'Type1'
+    if Noise == 'Type1':
         x[0] = 3.
         y[0] = y[0]+3.
         x[5] = 1.
         y[5] = y[5]-10.
+    elif Noise == 'Type2':
+        y[0] -= 10.
+        x[0] = 5.
     return (x,y)
 
 
