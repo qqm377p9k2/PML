@@ -1,7 +1,6 @@
-Reinforcement Learning
+#Reinforcement Learning
 
-===
-gridworld.py
+##gridworld.py
 ---
 An implementation of gridworld solver based on
 the epsilon-greedy action selection and Q-learning
