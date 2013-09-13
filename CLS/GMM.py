@@ -33,7 +33,7 @@ class GMM(object):
         return self
             
     def data(self):
-        return self.__data
+        return [slot.copy() for slot in self.__data]
 
     def labels(self):
         return [ones(self.__Ns[i])*i for i in range(len(self.__dists))]
