@@ -50,8 +50,7 @@ class mLinear(object):
         return (x[lim],ys[0][lim])
     
 
-        
-def main():
+def composeGMM():
     gmm = GMM(N=1000)
     gmm.append(natDist(array([-10.,5.]), 
                        array([[5.,0.],
@@ -64,6 +63,10 @@ def main():
     gmm.append(natDist(array([15.,15.]),
                        array([[5.,0.],
                               [0.,5.]])))
+    return gmm
+        
+def main():
+    gmm = composeGMM()
     (t,x) = gmm.sample().mixtures()
     colors = [['blue', 'red', 'green'][int(label)] for label in t]
     plt.scatter(x[:,0], x[:,1], color=colors)
@@ -76,12 +79,8 @@ def main():
     tics = arange(xlim[0]-3,xlim[1]+3,0.01)
     plt.xlim(xlim[0]-3,xlim[1]+3)
     plt.ylim(ylim[0]-3,ylim[1]+3)
-    plt.plot(tics, cls.classifiers[0].cPlane(tics),
-             color='gray')
-    plt.plot(tics, cls.classifiers[1].cPlane(tics),
-             color='gray')
-    plt.plot(tics, cls.classifiers[2].cPlane(tics),
-             color='gray')
+    for c in range(3):
+        plt.plot(*cls.classifiers[c].cPlane(tics), color='gray')
     p, val = cls.crossPoint()
     plt.scatter(*p, color='black')
     plt.plot(*cls.border(tics, target=(0,1)), color='black')
