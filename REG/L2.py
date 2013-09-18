@@ -8,12 +8,12 @@ import LSM
 
 def main():
     (x,y) = LSM.data()
-    (xwn, ywn) = LSM.data(Noise=True)
+    (xwn, ywn) = LSM.data(Noise=True, NL=0.3, N=10)
     lsm = LSM.LSM_L2(M=7, l=2.)
     tics = 2*pi*arange(0,1,0.02);
     lw = 5 #line width
 
-    ls = power(7., range(-2,3))
+    ls = array([0.0, 0.1, 10, 100])
     print(ls)
     for idcs in range(len(ls)):
         plt.subplot(len(ls),1,idcs+1)
