@@ -12,17 +12,19 @@ class GMM(object):
         self.__ratios = [1.]
 
     def append(self, dist, ratio=None):
-        assert(isinstance(dist, natDist))
+        assert(isinstance(dist, normalDist))
         if ratio is None:
             N = sum(array(self.__Ns))
             assert(N<self.__N)
             N = self.__N - N
         else:
             assert((ratio<1.) and  (ratio>0.))
-            assert(ratio<self.__ratios[-1])
-            self.__ratios.append(ratio)
-            self.__ratios[-2] -= ratio
+            rest =  self.__ratios[-1]
+            assert(ratio<rest)
+            self.__ratios.append(rest-ratio)
+            self.__ratios[-2] = ratio
             N = self.__ratios[-2]*self.__N
+            print self.__ratios
         self.__Ns.append(N)
         self.__dists.append(dist)
 
@@ -44,7 +46,7 @@ class GMM(object):
         idcs = permutation(len(t))
         return (t[idcs],x[idcs,:])
     
-class natDist(object):
+class normalDist(object):
     def __init__(self,mu, cov):
         dim = mu.shape[0]
         assert(mu.shape == (dim,))
@@ -64,11 +66,11 @@ class natDist(object):
 
 def main():
     gmm = GMM(N=1000)
-    gmm.append(natDist(array([10.,10.]), 
+    gmm.append(normalDist(array([10.,10.]), 
                        array([[5.,0.],
                               [0.,3.]])),
                0.5)
-    gmm.append(natDist(array([10.,-10.]),
+    gmm.append(normalDist(array([10.,-10.]),
                        array([[5.,0.],
                               [0.,5.]])))
     
