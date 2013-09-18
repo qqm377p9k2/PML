@@ -6,7 +6,7 @@ from numpy import *
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
-class mLinear(object):
+class multiClassLinear(object):
     def __init__(self, M):
         self.classifiers = []
         for i in range(M):
@@ -50,28 +50,42 @@ class mLinear(object):
         return (x[lim],ys[0][lim])
     
 
-def composeGMM():
-    gmm = GMM(N=1000)
-    gmm.append(natDist(array([-10.,5.]), 
-                       array([[5.,0.],
-                              [0.,3.]])),
-               0.4)
-    gmm.append(natDist(array([-5.,-10.]),
-                       array([[5.,0.],
-                              [0.,5.]])),
-               0.3)
-    gmm.append(natDist(array([15.,15.]),
-                       array([[5.,0.],
-                              [0.,5.]])))
+def composeGMM(type=1):
+    if type == 1:
+        gmm = GMM(N=1000)
+        gmm.append(normalDist(array([-10.,5.]), 
+                              array([[5.,0.],
+                                     [0.,3.]])),
+                   0.4)
+        gmm.append(normalDist(array([-5.,-10.]),
+                              array([[5.,0.],
+                                     [0.,5.]])),
+                   0.3)
+        gmm.append(normalDist(array([15.,15.]),
+                              array([[5.,0.],
+                                     [0.,5.]])))
+    elif type == 2:
+        gmm = GMM(N=1000)
+        gmm.append(normalDist(array([0.,5.]), 
+                              array([[5.,0.],
+                                     [0.,3.]])),
+                   0.3)
+        gmm.append(normalDist(array([-2.,-10.]),
+                              array([[5.,0.],
+                                     [0.,5.]])),
+                   0.3)
+        gmm.append(normalDist(array([-5.,15.]),
+                              array([[5.,0.],
+                                     [0.,5.]])))
     return gmm
-        
-def main():
-    gmm = composeGMM()
+
+def test(type):
+    gmm = composeGMM(type)
     (t,x) = gmm.sample().mixtures()
     colors = [['blue', 'red', 'green'][int(label)] for label in t]
     plt.scatter(x[:,0], x[:,1], color=colors)
     
-    cls = mLinear(3)
+    cls = multiClassLinear(3)
     cls.fit(x,t)
 
     xlim = [min(x[:,0]), max(x[:,0])]
@@ -86,10 +100,10 @@ def main():
     plt.plot(*cls.border(tics, target=(0,1)), color='black')
     plt.plot(*cls.border(tics, target=(1,2)), color='black')
     plt.plot(*cls.border(tics, target=(2,0)), color='black')
-    
-    #plt.plot()
     plt.show()
 
+def main():
+    test(type=2)
 
 
 if __name__=="__main__":
