@@ -22,17 +22,17 @@ class linear(object):
 
 def main():
     gmm = GMM(N=1000)
-    gmm.append(natDist(array([0.,10.]), 
-                       array([[5.,0.],
-                              [0.,3.]])),
+    gmm.append(normalDist(array([0.,10.]), 
+                          array([[5.,0.],
+                                 [0.,3.]])),
                0.4)
-    gmm.append(natDist(array([-5.,-10.]),
-                       array([[5.,0.],
-                              [0.,5.]])),
+    gmm.append(normalDist(array([-5.,-10.]),
+                          array([[5.,0.],
+                                 [0.,5.]])),
                0.3)
-    gmm.append(natDist(array([15.,15.]),
-                       array([[5.,0.],
-                              [0.,5.]])))
+    gmm.append(normalDist(array([15.,15.]),
+                          array([[5.,0.],
+                                 [0.,5.]])))
     (t,x) = gmm.sample().mixtures()
     colors = [['blue', 'red', 'green'][int(label)] for label in t]
     plt.scatter(x[:,0], x[:,1], color=colors)
