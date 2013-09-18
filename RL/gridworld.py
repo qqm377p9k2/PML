@@ -153,6 +153,8 @@ def main():
             plt.title(a.actions()[i])
             plt.colorbar()
         plt.show()
+    plt.quiver(Q[0]-Q[1], Q[3]-Q[2])
+    plt.show()
 
 if __name__=="__main__":
     main()
