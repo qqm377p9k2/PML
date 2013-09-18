@@ -41,6 +41,9 @@ class multiClassLinear(object):
         lim = dot(c_[x, y, ones(len(x))], wml[:,target[0]])>self.val
         return (x[lim],y[lim])
 
+    def classify(self, x):
+        pass
+
     def borders(self, x, target=0):
         wml = self.wml()
         wset = [wml[:,0]-wml[:,1], wml[:,0]-wml[:,2]]
@@ -79,7 +82,7 @@ def composeGMM(type=1):
                                      [0.,5.]])))
     return gmm
 
-def test(type):
+def test(type, examples=False):
     gmm = composeGMM(type)
     (t,x) = gmm.sample().mixtures()
     colors = [['blue', 'red', 'green'][int(label)] for label in t]
@@ -100,11 +103,14 @@ def test(type):
     plt.plot(*cls.border(tics, target=(0,1)), color='black')
     plt.plot(*cls.border(tics, target=(1,2)), color='black')
     plt.plot(*cls.border(tics, target=(2,0)), color='black')
+    if examples:
+        points = rand(100,2)
+        
     plt.show()
 
 def main():
     test(type=2)
-
+    
 
 if __name__=="__main__":
     main()
