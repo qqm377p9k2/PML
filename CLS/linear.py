@@ -18,7 +18,7 @@ class linear(object):
         self.wml = dot(t, dot(x_,LA.inv(dot(x_.T,x_)).T))
 
     def cPlane(self, x):
-        return -(self.wml[0]*x+self.wml[2])/self.wml[1]
+        return (x, -(self.wml[0]*x+self.wml[2])/self.wml[1])
 
 def main():
     gmm = GMM(N=1000)
@@ -44,7 +44,7 @@ def main():
     xlim = [min(x[:,0]), max(x[:,0])]
     tics = arange(xlim[0]-3,xlim[1]+3,0.01)
     plt.xlim(xlim[0]-3,xlim[1]+3)
-    plt.plot(tics, cls.cPlane(tics),
+    plt.plot(*cls.cPlane(tics),
              color='black')
     
     plt.show()
