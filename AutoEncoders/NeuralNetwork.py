@@ -16,8 +16,16 @@ def ReL(x):
 def ReLDot(x):
     return x>0
 
-class NeuralNetwork(object):
+class data(object):
+    
+
+class batchLearningAlgorithms(object):
+    def __init__(self, batchsz=100):
+        self.batchsz = batchsz
+
+class NeuralNetwork(batchLearningAlgorithms):
     def __init__(self, noUnits, learningParams):
+        super(NeuralNetwork, self).__init__()
         self.noUnits = noUnits #the Num Of Units
         self.learningParams = learningParams
         #noUnits = noUnits + [1, 0] #adding a pseudo visible unit for biasing
@@ -29,9 +37,18 @@ class NeuralNetwork(object):
             self.biases.append(0.01*randn(noUnits[layer],1))
         
     def generateBatches(self, labeledData):
-        labels = labeledData['training']['labels']
-        data = labeledData['training']['data']
-        pass
+        labels= labeledData['training']['labels']
+        data  = labeledData['training']['data']
+        assert((labels.ndim==2)&(data.ndim==2))
+        assert((labels.shape[1]==self.noUnits[-1])&(data.shape[1]==self.noUnits[0]))
+        assert(labels.shape[0]==data.shape[0])
+        datasz = labels.shape[0]
+        assert(mod(datasz, self.batchsz)==0)
+        noBatches = datasz/self.batchsz
+        order = permutation(datasz)
+        labels= reshape(labels[order], [noBatches , batchsz, labels.shape[1]])
+        data  = reshape(data[order],   [noBatches , batchsz, data.shape[1]])
+        return zip(data, labels)
 
     def train(self, labeledData, noEpochs):
         assert(noEpochs>0)
