@@ -28,39 +28,53 @@ class NeuralNetwork(object):
             self.weights.append(0.01*randn(noUnits[layer], noUnits[layer-1]))
             self.biases.append(0.01*randn(noUnits[layer],1))
         
-    def train(self, labeledData, noEpochs):
-        learningRate = learningParams['learningRate']
-        decayingRate = decayingParams['decayingRate']
+    def generateBatches(self, labeledData):
         labels = labeledData['training']['labels']
         data = labeledData['training']['data']
-        epochs = range(noEpochs)
-        dWeights= [zeros(W.shape) for W in self.weights]
-        dBiases = [zeros(b.shape) for b in self.biases]
-        for epoch in epochs:
-            #batches = 
-            for batch in batches:
-                activations, stimuli = self.ComputeForwardPass(batch)#a: activation, z:stimuli in the lecture note by Ng
-                errors = self.ComputeBackwardPass(labels, activations, stimuli)
-                for layer in self.layers():
-                    dWeights[layer-1]= dot(errors[layer], activation[layer-1].T)
-                    dBiases[layer-1] = mean(errors[layer], axis=1)
+        pass
 
-    def ComputeForwardPass(self, data):
-        assert(data.shape[1]==self.noUnits[0])
-        activation = [data]
-        stimuli = [[]]
+    def train(self, labeledData, noEpochs):
+        assert(noEpochs>0)
+        learningRate = learningParams['learningRate']
+        decayingRate = decayingParams['decayingRate']
+        epochs = range(noEpochs)
+        derivatives = {'weights':[zeros(W.shape) for W in self.weights], 
+                       'biases': [zeros(b.shape) for b in self.biases]}
+        for epoch in epochs:
+            batches = generateBatches(self, labeledData)
+            for batch in batches:
+                self.computeDerivative(*batches, derivatives)
+                for layer in self.layers():
+                    self.weights[layer-1]= self.weights[layer-1]+ learningRate*derivatives['weights'][layer-1]
+                    self.biases[layer-1] = self.biases[layer-1] + learningRate*derivatives['biases'][layer-1]                    
+
+    def computeDerivative(self, labels, data, derivatives):
+        activations, stimuli = self.computeForwardPass(data)#a: activation, z:stimuli in the lecture note by Ng
+        errors = self.computeBackwardPass(labels, activations, stimuli)
         for layer in self.layers():
-            stimuli[layer].append(dot(self.weights[layer-1], activations[layer-1]) + self.biases[layer-1])
-            activations[layer].append(activationFun[''](stimuli[layer]))
+            derivatives['weights'][layer-1]= dot(errors[layer], activations[layer-1].T)
+            derivatives['biases'][layer-1] = mean(errors[layer], axis=1)[:,newaxis]
+
+
+    def computeForwardPass(self, data):
+        assert(data.ndim==2)
+        assert(data.shape[0]==self.noUnits[0])
+        activations = [data]
+        stimuli = [array([[]])]
+        for layer in self.layers():
+            stimuli.append(dot(self.weights[layer-1], activations[layer-1]) + self.biases[layer-1])
+            activations.append(self.activationFun[''](stimuli[layer]))
         return activations, stimuli
 
 
-    def ComputeBackwardPass(self, labels, activation, stimuli):
-        assert(activations[-1].shape[1]==self.noUnits[-1])
-        errors = [[]]*self.noLayers()
-        errors[-1] = -(activations[-1] - labels)*activationFun['derivative'](stimuli[-1])
+    def computeBackwardPass(self, labels, activations, stimuli):
+        assert(activations[-1].ndim==2)
+        assert(activations[-1].shape[0]==self.noUnits[-1])
+        assert(all(activations[-1].shape==labels.shape))
+        errors = [array([[]])]*(self.noLayers()-1)
+        errors[-1] = -(activations[-1] - labels)*self.activationFun['derivative'](stimuli[-1])
         for layer in self.layers(direction=-1):
-            errors[layer] = dot(self.weights[layer].T, errors[layer+1])*activationFun['derivative'](stimuli[layer])
+            errors[layer] = dot(self.weights[layer].T, errors[layer+1])*self.activationFun['derivative'](stimuli[layer])
         return errors
 
     def layers(self, direction=1):
@@ -78,26 +92,36 @@ class NeuralNetwork(object):
         pass
 
 def testComputeForwardPass(nn):
-    a,z = ComputeForwardPass(rand(5,2))
-    print(a)
-    print(z)
+    a,z = nn.computeForwardPass(rand(5,1))
+    print([foo.shape for foo in a])
+    print([foo.shape for foo in z])
     return a,z
 
 def testComputeBackwardPass(nn,a,z):
-    d = ComputeBackwardPass(rand(2,2))
-    print(d)
+    d = nn.computeBackwardPass(array([[1],[0]]),a,z)
+    print([foo.shape for foo in d])
 
 def testLayers(nn):
     print(nn.layers())
     print(nn.layers(direction=-1))
 
+def testComputeDerivative():
+    nn = NeuralNetwork([5,3,5,2], {'learningRate': 1e-4})
+    der = {'weights':[zeros(W.shape) for W in nn.weights], 
+           'biases': [zeros(b.shape) for b in nn.biases]}
+    nn.computeDerivative(array([[1],[0]]), rand(5,1), der)
+    print([foo.shape for foo in der['weights']])
+    print([foo.shape for foo in der['biases']])
+    print(der)
+    
 def main():
     nn = NeuralNetwork([5,3,5,2], {'learningRate': 1e-4})
     print(nn.weights)
     print(nn.biases)
     testLayers(nn)
     a,z = testComputeForwardPass(nn)
-    testComputeForwardPass(nn,a,z):
+    testComputeBackwardPass(nn,a,z)
+    testComputeDerivative()
 
 if __name__=="__main__":
     main()
