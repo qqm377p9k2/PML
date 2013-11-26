@@ -16,14 +16,41 @@ def ReL(x):
 def ReLDot(x):
     return x>0
 
-class data(object):
+class LabeledData(object):
+    def __init__(training, test=None):
+        assert((training['labels'].ndim==2)&(training['data'].ndim==2))
+        assert(training['labels'].shape[0]==training['data'].shape[0])
+        self.training['data']   = training['data']
+        self.training['labels'] = training['labels']
+        if test:
+            assert((test['labels'].ndim==2)&(test['data'].ndim==2))
+            assert(test['labels'].shape[0]==test['data'].shape[0])
+            self.test['data']   = test['data']
+            self.test['labels'] = test['labels']
+
+    def generateBatches(self, learningModel):
+        labels= self.training['labels']
+        data  = self.training['data']
+        iodim = learningModel.ioDimension()
+        assert((labels.shape[1]==iodim['output'])&(data.shape[1]==iodim['input']))
+        datasz = labels.shape[0]
+        assert(mod(datasz, learningModel.batchsz)==0)
+        noBatches = datasz/learningModel.batchsz
+        order = permutation(datasz)
+        labels= reshape(labels[order], [noBatches , batchsz, labels.shape[1]])
+        data  = reshape(data[order],   [noBatches , batchsz, data.shape[1]])
+        return zip(data, labels)
     
+class Discriminants(object):
+    def ioDimension(self):
+        assert(False)
+        return {'input':0, 'output':0}
 
 class batchLearningAlgorithms(object):
     def __init__(self, batchsz=100):
         self.batchsz = batchsz
 
-class NeuralNetwork(batchLearningAlgorithms):
+class NeuralNetwork(batchLearningAlgorithms, Discriminants):
     def __init__(self, noUnits, learningParams):
         super(NeuralNetwork, self).__init__()
         self.noUnits = noUnits #the Num Of Units
@@ -36,20 +63,6 @@ class NeuralNetwork(batchLearningAlgorithms):
             self.weights.append(0.01*randn(noUnits[layer], noUnits[layer-1]))
             self.biases.append(0.01*randn(noUnits[layer],1))
         
-    def generateBatches(self, labeledData):
-        labels= labeledData['training']['labels']
-        data  = labeledData['training']['data']
-        assert((labels.ndim==2)&(data.ndim==2))
-        assert((labels.shape[1]==self.noUnits[-1])&(data.shape[1]==self.noUnits[0]))
-        assert(labels.shape[0]==data.shape[0])
-        datasz = labels.shape[0]
-        assert(mod(datasz, self.batchsz)==0)
-        noBatches = datasz/self.batchsz
-        order = permutation(datasz)
-        labels= reshape(labels[order], [noBatches , batchsz, labels.shape[1]])
-        data  = reshape(data[order],   [noBatches , batchsz, data.shape[1]])
-        return zip(data, labels)
-
     def train(self, labeledData, noEpochs):
         assert(noEpochs>0)
         learningRate = learningParams['learningRate']
@@ -58,7 +71,7 @@ class NeuralNetwork(batchLearningAlgorithms):
         derivatives = {'weights':[zeros(W.shape) for W in self.weights], 
                        'biases': [zeros(b.shape) for b in self.biases]}
         for epoch in epochs:
-            batches = generateBatches(self, labeledData)
+            batches = labeledData.generateBatches(self)
             for batch in batches:
                 self.computeDerivative(*batches, derivatives)
                 for layer in self.layers():
@@ -101,6 +114,9 @@ class NeuralNetwork(batchLearningAlgorithms):
             return range(len(self.noUnits)-2,0,-1)
         else:
             assert(False)
+
+    def ioDimension(self):
+        return {'input':noUnits[0], 'output':noUnits[-1]}
 
     def noLayers(self):
         return len(self.noUnits)+1
