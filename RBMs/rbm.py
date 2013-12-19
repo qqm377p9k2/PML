@@ -46,11 +46,13 @@ class RBM(object):
     def initByData(self, data):
         pass
 
-    def processDat(self, data):
+   def processDat(self, data):
         datasz = data.shape[0]
         assert(mod(datasz ,self.batchsz)==0)
         noBatches = datasz/self.batchsz
-        return data[ix_(permutation(datasz))].reshape((noBatches, self.batchsz, self.N()))
+        idcs = permutation(datasz).reshape((noBatches, self.batchsz))
+        for bid in xrange(noBatches):
+            yield data[idcs[bid]]
 
     #for PCD/CD selection
     def setAlgorithm(self, name):
@@ -91,8 +93,6 @@ class bRBM(RBM):
     def sweepAcrossData(self,data):
         sreg = self.sparseRegularizer()
         batchsz = float(self.batchsz)
-        vW,va,vb = self.vParams()
-        W, a, b  = self.params()
         lrate, mom, drate = self.lrates()
         particles = self.particles
         #main part of the training
@@ -116,12 +116,12 @@ class bRBM(RBM):
             da -= mean(eh,axis=0)
             db -= mean(ev,axis=0)
             # update
-            vW[:] = mom*vW + lrate*dW
-            va[:] = mom*va + lrate*da
-            vb[:] = mom*vb + lrate*db
-            W[:] = drate*W + vW
-            a[:] = drate*a + va
-            b[:] = drate*b + vb
+            self.vW = mom*self.vW + lrate*dW
+            self.va = mom*self.va + lrate*da
+            self.vb = mom*self.vb + lrate*db
+            self.W = drate*self.W + self.vW
+            self.a = drate*self.a + self.va
+            self.b = drate*self.b + self.vb
         self.particles = particles
 
     def train(self, data, epochs):
