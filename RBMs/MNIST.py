@@ -2,9 +2,12 @@ import cPickle, gzip, numpy
 
 def data():
     f = gzip.open('mnist.pkl.gz', 'rb')
-    training_set, valid_set, test_set = cPickle.load(f)
+    training, valid, test = cPickle.load(f)
     f.close()
-    return (training_set, valid_set, test_set)
+    training = {'data': training[0], 'labels': training[1]}
+    valid =    {'data': valid[0],    'labels': valid[1]}
+    test  =    {'data': test[0],     'labels': test[1]}
+    return {'training': training, 'valid': valid, 'test': test}
 
 def main():
     dat = data()
