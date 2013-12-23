@@ -1,4 +1,5 @@
 import cPickle, gzip, numpy
+from Data import *
 
 def data():
     f = gzip.open('mnist.pkl.gz', 'rb')
@@ -7,7 +8,14 @@ def data():
     training = {'data': training[0], 'labels': training[1]}
     valid =    {'data': valid[0],    'labels': valid[1]}
     test  =    {'data': test[0],     'labels': test[1]}
-    return {'training': training, 'valid': valid, 'test': test}
+    data = DataSet(training = Data(data  = training['data'], 
+                                   labels= training['labels']),
+                   test     = Data(data  = test['data'], 
+                                   labels= test['labels']),
+                   valid    = Data(data  = valid['data'], 
+                                   labels= valid['labels']))
+
+    return data
 
 def main():
     dat = data()
