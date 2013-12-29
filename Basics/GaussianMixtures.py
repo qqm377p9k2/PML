@@ -24,7 +24,7 @@ class GaussianMixture(object):
             assert(ratio<rest)
             self.ratios.append(rest-ratio)
             self.ratios[-2] = ratio
-            N = self.ratios[-2]*self.noDataPoints
+            N = int(self.ratios[-2]*self.noDataPoints)
             print self.ratios
         self.__noDataPoints.append(N)
         self.dists.append(dist)
