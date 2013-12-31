@@ -68,13 +68,6 @@ def monitorInit():
     plt.hold(False)    
     pass
 
-def binary_expression(num, nDigits):
-    return [mod(int(num)/base, 2) for base in 2**arange(nDigits-1,-1,-1)]
-
-def possible_configs(nDigits=3):
-    return [binary_expression(x, nDigits) for x in xrange(2**nDigits)]
-        
-
 @static_var("fig", figure())
 def monitor(rbm, data):
     fig = monitor.fig
@@ -93,6 +86,7 @@ def monitor(rbm, data):
     prob = unnorm_probability_of_h(rbm, H)
     prob = prob/sum(prob)
     print(prob)
+    print(rbm.activationProb(data))
     ells = [Ellipse(xy=center, width=3*rbm.sigma[0], height=3*rbm.sigma[1], angle=0) for center in centers]
     #
     #sample = rbm.sample()
@@ -103,16 +97,20 @@ def monitor(rbm, data):
     x = concatenate((x,sample), axis=0)
     colors += labels
     ax.add_artist(scatter(x[:,0], x[:,1], color=colors))
+    for vec in rbm.sigma*rbm.W:
+        ax.add_artist(arrow(rbm.b[0], rbm.b[1], *vec, head_width=0.3, head_length=0.5))
     for e,p in zip(ells, prob):
         ax.add_artist(e)
         e.set_clip_box(ax.bbox)
         e.set_alpha(p)
         e.set_facecolor(zeros(3))
-    ax.set_xlim(-10, 30)
-    ax.set_ylim(-10, 10)        
+    ax.set_xlim(-5, 10)
+    ax.set_ylim(-7, 7)        
     draw()
     show()
     print(rbm.W)
+    print(rbm.b)
+    print(rbm.a)
     #time.sleep(0.01)
     
 
@@ -149,17 +147,15 @@ def drawTest():
     ax.set_ylim(0, 10)
     show()
 
-def generateData2():
+def generateData2(dist = 10, N=1000, delta = pi/10.0, ratio=0.4):
     '''GM with four components where two of them are at the same position'''
-    dist = 10
-    gmms = [GaussianMixture(N=1000), GaussianMixture(N=1000)]
+    gmms = [GaussianMixture(N=N), GaussianMixture(N=N)]
     for gmm in gmms:
-        gmm.append(normalDist(zeros(2), asarray([[0.5,0],[0,0.5]])), 0.4)
-        gmm.append(normalDist(asarray([dist,0]), asarray([[0.2,0],[0,0.2]])))
+        gmm.append(normalDist(zeros(2), asarray([[1.,0],[0,1.]])), ratio)
+        gmm.append(normalDist(asarray([dist,0]), asarray([[1.,0],[0,1.]])))
     samples = [gmm.sample().mixtures()[1] for gmm in gmms]
     labels = [zeros(gmms[0].noDataPoints), ones(gmms[1].noDataPoints)]
     
-    delta = pi/10.0
     main = 0*pi/4.0
 
     rot = rotation2D(-main -delta)
@@ -389,7 +385,7 @@ def generateData20(shape =  asarray([3,0.7]), main = 0):
     return data
 
 
-def generateData21(N = 5000, sigma = 1, shape =  asarray([10,5]), main = 0, ratios=[8,2,2,1]):
+def generateData21(N = 5000, sigma = 1., shape =  asarray([10,5]), main = 0, ratios=[8,2,2,1]):
     ratios = asarray(ratios, dtype = float)
     ratios /= sum(ratios)
 
@@ -417,21 +413,36 @@ def generateData21(N = 5000, sigma = 1, shape =  asarray([10,5]), main = 0, rati
 
 generateData22 = ftk.partial(generateData21, shape=asarray([20,6]), ratios=[1,1,1,1])
 generateData23 = ftk.partial(generateData21, shape=asarray([15,6]), ratios=[90,5,5,1])
+generateData24 = ftk.partial(generateData21, N = 10000, shape=asarray([7,3]), ratios=[80,5,5,1])
+generateData25 = ftk.partial(generateData2,  dist = 4, N=5000, delta = pi/10.0, ratio=0.85) #not good
+generateData26 = ftk.partial(generateData2,  dist = 4, N=5000, delta = pi/15.0, ratio=0.85) #neither
+#The data dist needs to be close to the dist class that GRBM can efficiently model
+generateData27 = ftk.partial(generateData21, N = 10000, shape=asarray([8,2.5]), ratios=[80,5,5,1]) 
+generateData28 = ftk.partial(generateData21, N = 10000, shape=asarray([10,2.5]), ratios=[80,5,5,1]) 
+generateData29 = ftk.partial(generateData21, N = 10000, shape=asarray([8,2.2]), ratios=[80,5,5,2]) 
+generateData30 = ftk.partial(generateData21, N = 10000, shape=asarray([8,2.2]), ratios=[75,5,5,5]) #bad, too densy on the end
+generateData31 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.7]), ratios=[80,5,5,1])
+generateData32 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.8]), ratios=[80,5,5,1])
+generateData33 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.75]), ratios=[80,5,5,1])
+generateData34 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,1])
+generateData35 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,0.01])
+generateData36 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,0.1])
 
 
 def parse_command_line_args(argv, default_values):
     assert(len(argv)<=len(default_values))
     argv += ['']*(len(default_values) - len(argv))
-    return [eval(arg) if arg else val for  arg, val in zip(argv, default_values)]
+    return [arg if arg else val for  arg, val in zip(argv, default_values)]
 
 
-def main(generator = generateData):
+def main(generator = generateData, save={'filename':False}):
     epochs = 5000
+    #epochs = 30 
     monitorInit()
     data = generator()
-    rbm = GRBM(M=3, N=2)
+    rbm = GRBM(M=4, N=2)
     #rbm.lrate = variedParam(0.02)
-    rbm.sparsity = {'strength': 2., 'target': 0.05}
+    rbm.sparsity = {'strength': .5, 'target': 0.05}
     rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
     rbm.mom   = variedParam(0.0)
 
@@ -441,15 +452,18 @@ def main(generator = generateData):
     rbm.CDN = 1
     rbm.setAlgorithm('PCD')
     monitor(rbm, data)
-    print(rbm.train(data, epochs, monitor=monitor))
-
+    if save['filename']:
+        with gzip.open(save['filename'], 'wb') as output:
+            logger=genLogger(output, save['interval'])
+            rbm.train(data, epochs, monitor=monitor, logger=logger)
+    else:
+        logger=emptyLogger
+        rbm.train(data, epochs, monitor=monitor, logger=logger)
 
 if __name__ == "__main__":
-    generator, test = parse_command_line_args(sys.argv[1:], [generateData12, False])
-
-    #print(binary_expression(3,5))
-    #print(possible_configs(3))
-    if test: 
-        drawData(generator)
+    generator, test, save = parse_command_line_args(sys.argv[1:], ['generateData12', 'False', ''])
+    save = {'filename':save, 'interval':10}
+    if eval(test): 
+        drawData(eval(generator))
     else:
-        main(generator)
+        main(eval(generator), save=save)

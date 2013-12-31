@@ -4,14 +4,34 @@ import matplotlib.pyplot as plt
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
+import cPickle, gzip
+
 from basics import *
 
 from variedParam import *
 from Data import *
 import MNIST
 
-def empty(rbm, data):
+def emptyMonitor(rbm, data):
     pass
+
+def emptyLogger(mode='log', **kwargs):
+    if mode=='init':
+        pass
+    elif mode=='log':
+        pass
+
+def genLogger(output, interval=10):
+    def logger(mode='log', **kwargs):
+        if mode=='init':
+            info = {'nSamples': kwargs['epochs']/interval}
+            cPickle.dump(info, output)
+            cPickle.dump(kwargs['data'], output)
+            cPickle.dump(kwargs['rbm'], output)
+        elif mode=='logging':
+            if (0==mod(kwargs['rbm'].epoch, interval)):
+                cPickle.dump(kwargs['rbm'], output)
+    return logger
 
 class RBM(object):
     def __init__(self, M, N, batchsz=100):
@@ -56,16 +76,21 @@ class RBM(object):
         self.algorithm = name
         self.particles = rand(self.batchsz, self.shape[1])>0.8
 
+    def activationProb(self, data):
+        return mean(self.expectH(data.training.data), axis=0)
+
     #training
     def train(self, data, epochs,
-              monitor=empty):
+              monitor=emptyMonitor, logger=emptyLogger):
         assert(data.training.data.shape[1]==self.shape[1])
         assert(self.algorithm != None)
-        for epc in xrange(epochs):
+        logger(mode='init', rbm=self, epochs=epochs, data=data)
+        for epc in xrange(1,1+epochs):
             self.epoch = epc
             print('epoch:' + repr(epc))
             self.sweepAcrossData(self.processDat(data.training.data))
             monitor(self, data)
+            logger(mode='logging', rbm=self)
         return self
 
     def sample(self):

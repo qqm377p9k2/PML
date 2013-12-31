@@ -40,3 +40,18 @@ def isSymmetricMatrix(array, size=None):
     symmetricp = symmetricp&(all(array[diag, diag] == 0))
     return symmetricp
 
+
+def binary_expression(num, nDigits):
+    return [mod(int(num)/base, 2) for base in 2**arange(nDigits-1,-1,-1)]
+
+def possible_configs(nDigits=3):
+    return [binary_expression(x, nDigits) for x in xrange(2**nDigits)]
+        
+
+def main():
+    print(binary_expression(3,5))
+    print(possible_configs(3))
+
+
+if __name__=='__main__':
+    main()
