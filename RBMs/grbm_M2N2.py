@@ -6,6 +6,7 @@ import sys
 
 import time
 from pylab import *
+import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
 from numpy.random import randn, rand, permutation, gamma, standard_cauchy
@@ -68,9 +69,26 @@ def monitorInit():
     plt.hold(False)    
     pass
 
+def discriminantPlanes(rbm, x):
+    return [(x, -(w[0]*x/rbm.sigma[0]+bias)*(rbm.sigma[1]/w[1])) for w,bias in zip(rbm.W, rbm.a)]
+
+def monitorPostProc(rbm, fig, xlim):
+    pass
+
+def monitorPostProcWithLines(rbm, fig, xlim):
+    tics = arange(*xlim, step=0.1)
+    planes = discriminantPlanes(rbm, tics)
+    for p in planes:
+        print(p)
+        plt.plot(*p, color='black')
+
 @static_var("fig", figure())
-def monitor(rbm, data):
-    fig = monitor.fig
+def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc):
+    xlim = (-5, 12)
+    if fig:
+        monitor.fig = fig
+    else:
+        fig = monitor.fig
     ax = fig.add_subplot(111, aspect='equal')
     #canvas = ax.figure.canvas
     #background = canvas.copy_from_bbox(ax.bbox)
@@ -87,30 +105,42 @@ def monitor(rbm, data):
     prob = prob/sum(prob)
     print(prob)
     print(rbm.activationProb(data))
-    ells = [Ellipse(xy=center, width=3*rbm.sigma[0], height=3*rbm.sigma[1], angle=0) for center in centers]
+    ells = [Ellipse(xy=center, width=2*2*rbm.sigma[0], height=2*2*rbm.sigma[1], angle=0) for center in centers]
     #
     #sample = rbm.sample()
     #labels = ['green']*(sample.shape[0])
-    sample = rbm.particles#concatenate((sample,rbm.particles),axis=0)
-    labels = ['green']*(rbm.particles.shape[0]) #+= ['purple']*(rbm.particles.shape[0])
-    #
-    x = concatenate((x,sample), axis=0)
-    colors += labels
+    if rbm.algorithm == 'PCD':
+        sample = rbm.particles#concatenate((sample,rbm.particles),axis=0)
+        labels = ['green']*(rbm.particles.shape[0]) #+= ['purple']*(rbm.particles.shape[0])
+        x = concatenate((x,sample), axis=0)
+        colors += labels
+
     ax.add_artist(scatter(x[:,0], x[:,1], color=colors))
-    for vec in rbm.sigma*rbm.W:
-        ax.add_artist(arrow(rbm.b[0], rbm.b[1], *vec, head_width=0.3, head_length=0.5))
+    dynr = 3.5
     for e,p in zip(ells, prob):
         ax.add_artist(e)
         e.set_clip_box(ax.bbox)
-        e.set_alpha(p)
+        alpha = 0.5*max(log(p)/log(10)+dynr, 0.)/dynr
+        print('p%f, al%f'%(p,alpha))
+        e.set_alpha(alpha)
+        #e.set_alpha(0.9*max(p, 0.01))
+        #e.set_alpha(0.6*(p-0.3)+0.6*0.3+0.05)
         e.set_facecolor(zeros(3))
-    ax.set_xlim(-5, 10)
+    for vec in rbm.sigma*rbm.W:
+        ax.add_artist(arrow(rbm.b[0], rbm.b[1], *vec, width=0.05,head_width=0.6, head_length=1., color='white'))
+    post(rbm, fig, xlim)
+    ax.set_xlim(*xlim)
     ax.set_ylim(-7, 7)        
+    if axisoff:
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
     draw()
     show()
     print(rbm.W)
     print(rbm.b)
     print(rbm.a)
+    return fig
     #time.sleep(0.01)
     
 
@@ -425,9 +455,45 @@ generateData31 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.7]), 
 generateData32 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.8]), ratios=[80,5,5,1])
 generateData33 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.75]), ratios=[80,5,5,1])
 generateData34 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,1])
-generateData35 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,0.01])
+generateData35 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.7]), ratios=[80,5,5,0.00001])
 generateData36 = ftk.partial(generateData21, N = 10000, shape=asarray([7,2.6]), ratios=[80,5,5,0.1])
+generateData37 = ftk.partial(generateData21, N = 10000, shape=asarray([7,6]), ratios=[90,5,5,5])
 
+def generateData41(N = 5000, sigma = 1., radii=4.5, 
+                   angles = [-0.25*pi, +0.25*pi, 0.], 
+                   ratios=[5,5,5,80]):
+    ratios = asarray(ratios, dtype = float)
+    ratios /= sum(ratios)
+    angles = asarray(angles)
+
+    gmm = GaussianMixture(N=N)
+
+    radii = asarray(radii)
+    if radii.shape == ():
+        radii = radii*ones(angles.shape, dtype=float)
+
+    cov = asarray([[sigma,0],[0,sigma]])
+    means = asarray([[r*cos(angle),r*sin(angle)] for angle,r in zip(angles, radii)])
+    for mean,ratio in zip(means, ratios[:-1]):
+        gmm.append(normalDist(mean, cov), ratio)
+
+    gmm.append(normalDist(asarray([0,0]), cov))
+
+    print(ratios)
+    #print(gmm.noDataPoints)
+    #print(gmm._GaussianMixture__noDataPoints)
+    labels, samples = gmm.sample().mixtures()
+
+    data = DataSet(training = Data(data = samples, labels=labels))
+    return data
+
+
+generateData42 = ftk.partial(generateData41, N = 10000, radii=5.)
+generateData43 = ftk.partial(generateData41, N = 10000, radii=6.)
+generateData44 = ftk.partial(generateData41, N = 10000, radii=[7,7,7/sqrt(2)])
+generateData45 = ftk.partial(generateData41, N = 10000, angles = [0.3*pi, -0.3*pi, 0], radii=[6,6,7/sqrt(2)])
+generateData46 = ftk.partial(generateData41, N = 10000, radii=[6,6,7/sqrt(2)])
+generateData47 = ftk.partial(generateData41, N = 10000, angles = [(1./3.)*pi, -(1./3.)*pi, pi], radii=[6,6,6])
 
 def parse_command_line_args(argv, default_values):
     assert(len(argv)<=len(default_values))
@@ -442,7 +508,7 @@ def main(generator = generateData, save={'filename':False}):
     data = generator()
     rbm = GRBM(M=4, N=2)
     #rbm.lrate = variedParam(0.02)
-    rbm.sparsity = {'strength': .5, 'target': 0.05}
+    #rbm.sparsity = {'strength': .5, 'target': 0.05}
     rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
     rbm.mom   = variedParam(0.0)
 

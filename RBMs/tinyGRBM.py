@@ -73,7 +73,8 @@ def main(generator = generateData, save = {'filename':False}):
     epochs = 5000
     monitorInit()
     data = generator()
-    rbm = tinyGRBM(M=2, N=2)
+    rbm = tinyGRBM(M=4, N=2)
+    rbm.algorithm = 'TRUE'
     #rbm.lrate = variedParam(0.02)
     rbm.sparsity = {'strength': .4, 'target': 0.05}
     rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
@@ -83,7 +84,6 @@ def main(generator = generateData, save = {'filename':False}):
     #rbm.sigma = 0.4*rbm.sigma
     rbm.sigma = sqrt(1.0)*asarray([1.0,1.0])
     rbm.CDN = 1
-    rbm.setAlgorithm('PCD')
     monitor(rbm, data)
     if save['filename']:
         with gzip.open(save['filename'], 'wb') as output:

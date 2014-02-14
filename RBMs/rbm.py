@@ -72,7 +72,7 @@ class RBM(object):
     #for PCD/CD selection
     def setAlgorithm(self, name):
         assert(self.algorithm == None)
-        assert(name in ['CD', 'PCD'])
+        assert(name in ['CD', 'PCD', 'TRUE'])
         self.algorithm = name
         self.particles = rand(self.batchsz, self.shape[1])>0.8
 
