@@ -5,6 +5,7 @@ import functools as ftk
 import sys
 
 import time
+import argparse
 from pylab import *
 from matplotlib.patches import Ellipse
 
@@ -12,13 +13,17 @@ from numpy.random import randn, rand, permutation, gamma, standard_cauchy
 from numpy import linalg as LA
 
 import MNIST
+##bad habbit!
 from Data import *
 from rbm import *
 from variedParam import * 
 from grbm_M2N2 import *
 
 from GaussianMixtures import *
-from basics import *
+from basics import possible_configs
+
+def gaussian_pdf(x, sigma, mean):
+    return exp(-sum((((x-mean)/sigma)**2), axis=1)/2.)/prod(sqrt(2.*pi)*sigma)
 
 class tinyGRBM(GRBM):
     """Tiny Gaussian RBMs"""
@@ -29,14 +34,22 @@ class tinyGRBM(GRBM):
     def freeEnergyOfH(self, h):
         centers = self.b + self.sigma * dot(h,self.W)
         foo = (sum((centers/self.sigma)**2, axis=1)/2)[:,newaxis] + dot(h,self.a[:,newaxis])
-        return foo
+        return -foo
 
     def probabilityH(self):
         fh = self.freeEnergyOfH(self.configs)
-        ph = exp(fh)/sum(exp(fh))
+        ph = exp(-fh)/sum(exp(-fh))
         ph[isnan(ph)] = 1.
         return ph
 
+    def mean(self, h):
+        return self.b + self.sigma * dot(h,self.W)        
+
+    def log_likelihood(self, data):
+        ph = self.probabilityH()
+        log_likelihood = log(asarray([dot(gaussian_pdf(v, self.sigma, self.mean(self.configs)), ph) for v in data])).mean()
+        return log_likelihood
+        
     def sweepAcrossData(self,data):
         strength, target = self.sparsity.values()
         batchsz = float(self.batchsz)
@@ -76,7 +89,8 @@ def main(generator = generateData, save = {'filename':False}):
     rbm = tinyGRBM(M=4, N=2)
     rbm.algorithm = 'TRUE'
     #rbm.lrate = variedParam(0.02)
-    rbm.sparsity = {'strength': .4, 'target': 0.05}
+    #rbm.sparsity = {'strength': .4, 'target': 0.05}
+    rbm.sparsity = {'strength': 0., 'target': 0.}
     rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
     rbm.mom   = variedParam(0.0)
 
@@ -94,9 +108,21 @@ def main(generator = generateData, save = {'filename':False}):
         rbm.train(data, epochs, monitor=monitor, logger=logger)
 
 if __name__ == "__main__":
-    generator, test, save = parse_command_line_args(sys.argv[1:], ['generateData12', 'False', ''])
-    save = {'filename':save, 'interval':10}
-    if eval(test): 
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--epochs', type=int, nargs=1, default=[80])
+    ap.add_argument('--learning_rate', type=float, nargs=1, default=[0.003], help='learning rate')
+    ap.add_argument('--batch_size', type=int, nargs=1, default=[100], help='batch size')
+    ap.add_argument('--n_hidden', type=int, nargs=1, default=[500], help='number of hidden units')
+    ap.add_argument('--n_updates', type=int, nargs=1, default=[1], help='k of CD-k')
+    ap.add_argument('--persistent', default=True, action='store_false', help='persistent or not')
+    ap.add_argument('--debug',  default=False, action='store_true', help='persistent or not')
+    ap.add_argument('--n_chains', type=int, nargs=1, default=[100], help='number of fantasy particles')
+    ap.add_argument('--filename', default=None)
+    ap.add_argument('--data', default='generateData42')
+    args = ap.parse_args()
+
+    save = {'filename':args.filename, 'interval':10}
+    if args.debug: 
         drawData(eval(generator))
     else:
-        main(eval(generator), save=save)
+        main(eval(args.data), save=save)
