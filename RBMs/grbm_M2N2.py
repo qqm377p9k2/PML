@@ -64,10 +64,10 @@ def drawData(generator=generateData):
     show()
 
 
-def monitorInit():
-    ion()
-    plt.hold(False)    
-    pass
+def monitorInit(hold=True):
+    if hold:
+        ion()
+        plt.hold(False)    
 
 def discriminantPlanes(rbm, x):
     return [(x, -(w[0]*x/rbm.sigma[0]+bias)*(rbm.sigma[1]/w[1])) for w,bias in zip(rbm.W, rbm.a)]
@@ -83,7 +83,7 @@ def monitorPostProcWithLines(rbm, fig, xlim):
         plt.plot(*p, color='black')
 
 @static_var("fig", figure())
-def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc):
+def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc, debug=False):
     xlim = (-5, 12)
     if fig:
         monitor.fig = fig
@@ -103,8 +103,9 @@ def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc):
     centers = rbm.b + rbm.sigma * dot(H,rbm.W)
     prob = unnorm_probability_of_h(rbm, H)
     prob = prob/sum(prob)
-    print(prob)
-    print(rbm.activationProb(data))
+    if debug:
+        print(prob)
+        print(rbm.activationProb(data))
     ells = [Ellipse(xy=center, width=2*2*rbm.sigma[0], height=2*2*rbm.sigma[1], angle=0) for center in centers]
     #
     #sample = rbm.sample()
@@ -121,7 +122,8 @@ def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc):
         ax.add_artist(e)
         e.set_clip_box(ax.bbox)
         alpha = 0.5*max(log(p)/log(10)+dynr, 0.)/dynr
-        print('p%f, al%f'%(p,alpha))
+        if debug:
+            print('p%f, al%f'%(p,alpha))
         e.set_alpha(alpha)
         #e.set_alpha(0.9*max(p, 0.01))
         #e.set_alpha(0.6*(p-0.3)+0.6*0.3+0.05)
@@ -137,9 +139,10 @@ def monitor(rbm, data, axisoff=False, fig=None, post=monitorPostProc):
         fig.add_axes(ax)
     draw()
     show()
-    print(rbm.W)
-    print(rbm.b)
-    print(rbm.a)
+    if debug:
+        print(rbm.W)
+        print(rbm.b)
+        print(rbm.a)
     return fig
     #time.sleep(0.01)
     
