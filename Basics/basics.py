@@ -42,11 +42,15 @@ def isSymmetricMatrix(array, size=None):
 
 
 def binary_expression(num, nDigits):
-    return [mod(int(num)/base, 2) for base in 2**arange(nDigits-1,-1,-1)]
+    return asarray([mod(asarray(num, dtype=int)/base, 2) for base in 2**arange(nDigits-1,-1,-1)]).T
 
 def possible_configs(nDigits=3):
     return [binary_expression(x, nDigits) for x in xrange(2**nDigits)]
         
+
+def logSumExp(logZ):
+    logZmax = max(logZ)
+    return log(sum(exp(logZ - asarray(logZmax)))) + logZmax
 
 def main():
     print(binary_expression(3,5))
