@@ -12,6 +12,7 @@ from nltk.corpus import treebank
 from collections import Counter
 
 import matplotlib.pyplot as plt
+import scipy.optimize as scopt
 
 import argparse
 import sys
@@ -24,7 +25,7 @@ MAX_N = 27
 
 class Ising(object):
     def __init__(self, 
-                 type = ('ST'), 
+                 type = 'ST', 
                  **kwarg):
         if type == 'ST':
             if 'N' in kwargs.keys():
@@ -46,14 +47,20 @@ class Ising(object):
                 self.N = N
         elif type == 'FT':
             self.N = kwarg['N']
-            self.W = kwarg['half_bJ']*ones((self.N,self.N))
+            self.W = kwarg['half_bJ']*ones((self.N,self.N))/self.N
+        elif type == 'HN':#Hopfield Net
+            self.N = kwarg['N']
+            ptns = (random.randn(kwarg['npatterns'], self.N) > 0)*2 - 1.
+            self.ptns = ptns
+            self.W = ptns.T.dot(ptns)/self.N
         elif type == 'RBM':
             N, M = kwarg['N'], kwarg['M']
             self.N = N+M
             self.W = zeros((N+M,N+M))
             self.W[:N, N:] = W
             self.W[N:, :N] = self.W[:N, N:].T
-        self.eigen = linalg.eig(self.W)
+        self.eigen = safeEig(self.W)
+        self.effective = abs(self.eigen[0]) > 1e-5
 
     def computeZ2(self):
         assert(self.N < 30)
@@ -102,13 +109,50 @@ class Ising(object):
         ranges = abs(u).sum(axis=0)/sqrt(self.N)
         return randn(n_samples, self.n)*ranges/2.
         
-    def findroots(self, m0):
+    def findroots(self, m0, debug=False):
         s, U = self.eigen
-        effective = abs(s) > 1e-5
+        effective = self.effective
         def fun(m):
-            return m - tanh(2*sqrt(self.N)*((s*U)[effective]).T * m)
+            return m - U[:,effective].T.dot(tanh(2*sqrt(self.N)*m.dot((U*s)[:,effective].T)))/sqrt(self.N)
         def jac(m):
-            pass
+            sqsech = cosh(2*sqrt(self.N)*m.dot((U*s)[:,effective].T)).T**(-2.)
+            return eye(effective.sum()) - 2.*(U[:,effective].T*sqsech).dot((U*s)[:,effective])
+        if debug:
+            return fun(m0), jac(m0)
+        return asarray([scopt.fsolve(func=fun, fprime=jac, x0 = m0_) for m0_ in m0])
+
+    def detjac(self, m, debug=False):
+        '''
+        Determinant of the complex free energy at a suddle point:
+        \[
+         f(\vec{m},\vec{\hat{M}}(m)) = - \sum_{k=1}^{n} \lambda_k m_k^2 - i\tr{\vec{m}}\vec{\hat{M}}(m) 
+         - \frac{1}{N}\sum_{l=1}^{N} \log\left(2\cos\left(\sum_{j=1}^{n} u_{lj}\hat{M}_j(m) \right)\right)
+        \]
+        where the number of units is denoted by $N$, 
+        the number of non-zero eigen values of the connection matrix $W$ is denoted by $n$, 
+        $u_{ij}$ is the $i$th element of the $j$th eigen vector of $W$, 
+        and $\vec{\hat{M}}(m)$ is defined as 
+        \[
+        \nabla_{\vec{m}} f(\vec{m},\vec{\hat{M}}(m)) = 0
+        \]
+        '''
+        s, U = self.eigen
+        effective = self.effective
+        neff = effective.sum()
+        def jac(m):
+            sqsech = cosh(2*sqrt(self.N)*m.dot((U*s)[:,effective].T)).T**(-2.)
+            return concatenate((concatenate((-2.*diag(s[effective]), -eye(neff)*1j),axis=1),
+                                concatenate((-eye(neff)*1j, (U[:,effective].T*sqsech).dot(U[:,effective])), axis=1)))
+        if debug:
+            return linalg.det(jac(m)).real, jac(m)
+        else:
+            return linalg.det(jac(m)).real
+
+    def free_energy(self, m):
+        s, U = self.eigen
+        eff = self.effective
+        N = self.N
+        return m.dot(m*s[eff]) - log(2.*cosh(2*sqrt(N)*m.dot((U*s)[:,eff].T))).sum(axis=0)/N
 
     @staticmethod
     def all_configs(N):
@@ -119,7 +163,71 @@ class Ising(object):
         else:
             raise(NotImplementedError)
 
+def test10(N=20, half_bJ=2.):
+    ft = Ising(type='FT', N=N, half_bJ = half_bJ)
+    m = arange(-2, 2, 0.02)
+    obj, dobj = zip(*[ft.findroots(asarray([mm]), debug=True) for mm in m])
+    obj = asarray([v[0] for v in obj])
+    dobj= asarray([v[0] for v in dobj])
+    plt.plot(m, obj)
+    plt.plot(m, dobj)
+    plt.show()
+    return obj, dobj
 
+def norm2(vec):
+    return sqrt((vec*vec).sum(axis=len(vec.shape)-1))
+
+def uniqueVec(a):
+    '''heuristic routine for finding unique vectors'''
+    a *= sign(a[:,0])[:, newaxis] ##remove the reflextional symmetry
+    def foo(a,idx):
+        a = a[argsort(a[:, idx])]
+        ui = ones(len(a), 'bool')
+        ui[1:] = abs(diff(a[:, idx], axis=0)) > 1e-5
+        return a[ui]
+    tmp = [foo(a, idx) for idx in random.permutation(a.shape[1])[:min(10, a.shape[1])]]
+    assert(all(asarray([len(aa) for aa in tmp]) - len(tmp[0]) == 0))
+    return tmp[0]
+
+def test10_1(N=20, half_bJ=2.):
+    ft = Ising(type='FT', N=N, half_bJ = half_bJ)
+    m = random.rand(10)
+    roots = ft.findroots(m[:, newaxis])
+    roots = uniqueVec(roots)
+    hessian = asarray([ft.detjac(m) for m in roots])
+    fenergy = asarray([ft.free_energy(m) for m in roots])
+    print hessian
+    print roots
+    argsup = hessian>0
+    assert(any(argsup))
+    logZ = log((exp(-ft.N*(fenergy[argsup]))/sqrt(hessian[argsup])).sum()) + log(2)
+    print 'general routine:', logZ
+
+    import AntiFerro_MF as MF
+    MF.bJ = 2*half_bJ
+    MF.N = N
+    print 'FT specific1:', MF.computeZ2()
+    print 'FT specific2:', MF.computeZ3()
+    
+    assert(N<27)
+    print 'EXHAUSTIVE COMP.:', ft.computeZ()
+    
+
+
+def test11():
+    net = Ising('HN', N=500, npatterns=100)
+    roots = net.findroots(random.randn(200, 100))
+    dist = asarray([sqrt(((roots-v)**2.).sum(axis=1)) for v in roots])
+    plt.hist2d(*zip(*[[net.free_energy(m), sign(net.detjac(m))] for m in roots]), bins=20)
+    plt.show()
+    return roots, dist
+
+
+def safeEig(symmat):
+    s, U = linalg.eigh(symmat)
+    UU = U.dot(U.T)
+    assert(all((UU-ones(UU.shape))<1e-5))
+    return s, U
 
 def Walsh(p):
     def fun(n, W=asarray([[1,1],[1,-1]])):

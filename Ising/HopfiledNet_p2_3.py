@@ -24,10 +24,6 @@ X, Y = meshgrid(X, Y)
 Z = H((X+1)/2) + H(((Y/(1-abs(X)))+1)/2) #+ 0.2*X**2 + 0.7*Y**2
 Z[abs(X)+ abs(Y) > 1] = 0
 
-ZZ = H((Y+1)/2) + H(((X/(1-abs(Y)))+1)/2)
-ZZ[abs(X)+ abs(Y) > 1] = 0
-#Z = exp(10*Z)
-
 surf = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=cm.coolwarm,
         linewidth=0, antialiased=False)
 #ax.set_zlim(-1.01, 1.01)

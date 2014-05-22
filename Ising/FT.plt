@@ -8,7 +8,7 @@ reset
 set xrange [-1:1]
 #set yrange [.65:.75]
 
-bJ = 1.5
+bJ = 4.
 set xrange [-1:1]
 plot -0.5*bJ*x**2+ log(2*cosh(bJ*x))
 
