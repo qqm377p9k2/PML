@@ -34,7 +34,14 @@ def genLogger(output, interval=10):
     return logger
 
 class RBM(object):
-    def __init__(self, M, N, batchsz=100):
+    def __init__(self, M=None, N=None, shape=None, batchsz=100):
+        if shape:
+            assert((M is None) and (N is None))
+            M, N = shape
+        self.shape = (M,N)
+        self.N = N
+        self.M = M
+
         self.W = 0.01*randn(M,N)
         self.a = 0.01*randn(M)
         self.b = 0.01*randn(N)
@@ -47,7 +54,6 @@ class RBM(object):
         self.particles = None
         self.CDN = 1
         self.sparsity = {'strength': 0., 'target': 0.}
-        self.shape = (M,N)
         #learning rates
         self.lrate = variedParam(0.005)
         self.drate = variedParam(1.0)
@@ -143,6 +149,65 @@ class BRBM(RBM):
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
 
+    def AIS(self, betaseq, N=100, base_rbm=None):
+        if not(base_rbm):
+            base_rbm = BRBM(M=self.M, N=self.N)
+        bA = base_rbm.b
+        MA = base_rbm.shape[0]
+        WB, aB, bB = self.W, self.a, self.b
+        logZA =MA*log(2) + ReL(bA).sum()
+        prob = sigmoid(tile(bA, [N, 1]))
+        vis = prob > rand(*prob.shape)
+        logw = -(vis.dot(bA) + MA*log(2))
+        for beta in betaseq[1:-1]:
+            logw += (1-beta)*vis.dot(bA) + beta*vis.dot(bB) + ReL(beta*(vis.dot(WB.T)+aB)).sum(axis=1)
+            prob = sigmoid(beta*(vis.dot(WB.T)+aB))
+            hid  =  prob > rand(*prob.shape)
+            prob = sigmoid((1-beta)*bA + beta*(hid.dot(WB)+bB))
+            vis  = prob > rand(*prob.shape)
+            logw -= (1-beta)*vis.dot(bA) + beta*vis.dot(bB) + ReL(beta*(vis.dot(WB.T)+aB)).sum(axis=1)
+        logw += vis.dot(bB) + ReL((vis.dot(WB.T)+aB)).sum(axis=1)
+        logZB = logSumExp(logw) + logZA
+        return logZB
+
+def basemodel_for(data, batchsz, debug=False):
+    #data = MNIST.data()
+    N = data.dim
+    rbm = BRBM(M=1, N=784)
+    rbm.W[:] = 0
+    rbm.a[:] = 0
+    p = zeros(N)
+    nbatches = data.training.size/batchsz
+    assert(data.training.size%batchsz == 0)
+    batches = data.training.data.reshape((nbatches, batchsz, N))
+    for batch in batches:
+        p += batch.sum(axis=0)
+    p /= float(data.training.size)
+    if debug:
+        plt.plot(p)
+        plt.show()
+    rbm.b = log(p) - log(1-p)
+    rbm.b[isinf(rbm.b)] = -500
+    return rbm
+
+def ReL(x):
+    ans = log(1+exp(x))
+    ans[x>500] = x[x>500]
+    return ans
+
+def betaseq(separators, counts):
+    assert(separators[0]==0.0 and separators[-1]==1.0)
+    assert(all(diff(separators)>0))
+    import functools as ft
+    import operator as op
+    intervals= diff(separators)
+    seq = [intv*arange(c)/c for c, intv in zip(counts, intervals)]
+    seq = [list(subseq+sep) for subseq, sep in zip(seq, separators[:-1])]
+    seq.append([1.])
+    seq = ft.reduce(op.add, seq)
+    return asarray(seq)
+        
+
 class GRBM(RBM):
     """Gaussian RBMs"""
     def __init__(self, M, N, batchsz=100):
@@ -203,15 +268,22 @@ def monitor(rbm, data):
     img = zeros((280,280))
     for i in xrange(10):
         for j in xrange(10):
-            img[i*28:(i+1)*28, j*28:(j+1)*28] = rbm.W.reshape((10,10,28,28))[i,j]
+            img[i*28:(i+1)*28, j*28:(j+1)*28] = rbm.W[:100].reshape((10,10,28,28))[i,j]
+    plt.subplot(2,1,1)
     plt.imshow(img, animated=True)
+    print sort(LA.svd(rbm.W)[1])
+    N, M = rbm.shape
+    W = concatenate((concatenate((zeros((N,N)), rbm.W), axis=1), 
+                     concatenate((rbm.W.T     , zeros((M,M))), axis=1)))
+    plt.subplot(2,1,2)
+    plt.plot(sort(LA.eigh(W)[0]))
     plt.draw()
 
 
 def testBRBM():
     monitorInit()
     data = MNIST.data()
-    rbm = BRBM(M=100, N=784)
+    rbm = BRBM(M=500, N=784)
     rbm.CDN = 1
     rbm.setAlgorithm('CD')
     rbm.sparsity['strength'] = 0.0
