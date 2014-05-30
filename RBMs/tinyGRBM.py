@@ -83,15 +83,23 @@ class tinyGRBM(GRBM):
 
 
 def main(generator = generateData, save = {'filename':False}, 
-         epochs = 5000):
+         epochs = 5000, n_hidden=4, method='GD',
+         const_lr = False, sparsity=0.0):
     monitorInit()
     data = generator()
-    rbm = tinyGRBM(M=4, N=2)
-    rbm.algorithm = 'TRUE'
+    if method == 'GD':
+        rbm = tinyGRBM(M=n_hidden, N=2)
+        rbm.algorithm = 'TRUE'
+    elif method == 'SGD':
+        rbm = GRBM(M=n_hidden, N=2)
+        rbm.setAlgorithm('PCD')
     #rbm.lrate = variedParam(0.02)
     #rbm.sparsity = {'strength': .4, 'target': 0.05}
-    rbm.sparsity = {'strength': 0., 'target': 0.}
-    rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
+    rbm.sparsity = {'strength': sparsity[0], 'target': sparsity[1]}
+    if const_lr:
+        rbm.lrate = variedParam(0.02)
+    else:
+        rbm.lrate = variedParam(0.02, schedule=[['linearlyDecayFor', epochs]])
     rbm.mom   = variedParam(0.0)
 
     rbm.initWithData(data)
@@ -112,11 +120,14 @@ if __name__ == "__main__":
     ap.add_argument('--epochs', type=int, nargs=1, default=[5000])
     ap.add_argument('--learning_rate', type=float, nargs=1, default=[0.003], help='learning rate')
     ap.add_argument('--batch_size', type=int, nargs=1, default=[100], help='batch size')
-    ap.add_argument('--n_hidden', type=int, nargs=1, default=[500], help='number of hidden units')
+    ap.add_argument('--n_hidden', type=int, nargs=1, default=[4], help='number of hidden units')
     ap.add_argument('--n_updates', type=int, nargs=1, default=[1], help='k of CD-k')
     ap.add_argument('--persistent', default=True, action='store_false', help='persistent or not')
+    ap.add_argument('--sparsity', type=float, nargs=2, default=[0., 0.05], help='sparsity')
     ap.add_argument('--debug',  default=False, action='store_true', help='persistent or not')
+    ap.add_argument('--const_lr',  default=False, action='store_true', help='decaying learing rate or not')
     ap.add_argument('--n_chains', type=int, nargs=1, default=[100], help='number of fantasy particles')
+    ap.add_argument('--method', default='GD')
     ap.add_argument('--filename', default=None)
     ap.add_argument('--data', default='generateData42')
     args = ap.parse_args()
@@ -125,4 +136,4 @@ if __name__ == "__main__":
     if args.debug: 
         drawData(eval(generator))
     else:
-        main(eval(args.data), save=save, epochs=args.epochs[0])
+        main(eval(args.data), save=save, epochs=args.epochs[0], n_hidden=args.n_hidden[0], method=args.method, const_lr=args.const_lr, sparsity=args.sparsity)

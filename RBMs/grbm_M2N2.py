@@ -494,6 +494,10 @@ generateData44 = ftk.partial(generateData41, N = 10000, radii=[7,7,7/sqrt(2)])
 generateData45 = ftk.partial(generateData41, N = 10000, angles = [0.3*pi, -0.3*pi, 0], radii=[6,6,7/sqrt(2)])
 generateData46 = ftk.partial(generateData41, N = 10000, radii=[6,6,7/sqrt(2)])
 generateData47 = ftk.partial(generateData41, N = 10000, angles = [(1./3.)*pi, -(1./3.)*pi, pi], radii=[6,6,6])
+generateData48 = ftk.partial(generateData41, N = 10000, radii=[5,5,7])
+generateData49 = ftk.partial(generateData41, N = 10000, radii=[5,5,6])
+generateData50 = ftk.partial(generateData41, N = 10000, radii=[5,5,6], ratios=[5,5,7,80])
+generateData51 = ftk.partial(generateData41, N = 10000, radii=[5,5,6], ratios=[5,5,10,80])
 
 def parse_command_line_args(argv, default_values):
     assert(len(argv)<=len(default_values))
