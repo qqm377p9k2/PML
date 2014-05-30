@@ -5,6 +5,8 @@ class Data(object):
         self.data = data
         self.labels = labels
         self.batch_size = batch_size
+        self.size = self.data.shape[0]
+        self.dim  = self.data.shape[1]
     def batches(self):
         datasz = self.data.shape[0]
         assert(mod(datasz ,self.batch_size)==0)
@@ -18,4 +20,5 @@ class DataSet(object):
         self.training = training
         self.test = test
         self.valid = valid
-
+        self.dim = self.training.dim
+        self.sizes = training.size, test.size, valid.size

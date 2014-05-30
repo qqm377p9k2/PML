@@ -48,9 +48,17 @@ def possible_configs(nDigits=3):
     return [binary_expression(x, nDigits) for x in xrange(2**nDigits)]
         
 
-def logSumExp(logZ):
+def logSumExp_(logZ):
     logZmax = max(logZ)
     return log(sum(exp(logZ - asarray(logZmax)))) + logZmax
+
+def logSumExp(logZ, axis=None):
+    if axis is None:
+        axis = len(logZ.shape) -1 
+    logZmax = logZ.max(axis=axis)
+    shape = copy(logZ.shape)
+    shape[axis] = 1
+    return log(sum(exp(logZ - logZmax.reshape(shape)), axis=axis)) + logZmax
 
 def main():
     print(binary_expression(3,5))
