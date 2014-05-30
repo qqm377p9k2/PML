@@ -82,8 +82,8 @@ class tinyGRBM(GRBM):
         print(sqrt(sum(self.W*self.W)))
 
 
-def main(generator = generateData, save = {'filename':False}):
-    epochs = 5000
+def main(generator = generateData, save = {'filename':False}, 
+         epochs = 5000):
     monitorInit()
     data = generator()
     rbm = tinyGRBM(M=4, N=2)
@@ -109,7 +109,7 @@ def main(generator = generateData, save = {'filename':False}):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument('--epochs', type=int, nargs=1, default=[80])
+    ap.add_argument('--epochs', type=int, nargs=1, default=[5000])
     ap.add_argument('--learning_rate', type=float, nargs=1, default=[0.003], help='learning rate')
     ap.add_argument('--batch_size', type=int, nargs=1, default=[100], help='batch size')
     ap.add_argument('--n_hidden', type=int, nargs=1, default=[500], help='number of hidden units')
@@ -125,4 +125,4 @@ if __name__ == "__main__":
     if args.debug: 
         drawData(eval(generator))
     else:
-        main(eval(args.data), save=save)
+        main(eval(args.data), save=save, epochs=args.epochs[0])
