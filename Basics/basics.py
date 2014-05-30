@@ -4,6 +4,30 @@ import matplotlib.pyplot as plt
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
+import cPickle
+import gzip
+
+def meshgrid2(*arrs):
+    arrs = tuple(reversed(arrs))  #edit
+    lens = map(len, arrs)
+    dim = len(arrs)
+
+    sz = 1
+    for s in lens:
+        sz*=s
+
+    ans = []    
+    for i, arr in enumerate(arrs):
+        slc = [1]*dim
+        slc[i] = lens[i]
+        arr2 = asarray(arr).reshape(slc)
+        for j, sz in enumerate(lens):
+            if j!=i:
+                arr2 = arr2.repeat(sz, axis=j) 
+        ans.append(arr2)
+
+    return tuple(ans)
+
 def static_var(varname, value):
     def decorate(func):
         setattr(func, varname, value)
@@ -51,6 +75,15 @@ def possible_configs(nDigits=3):
 def main():
     print(binary_expression(3,5))
     print(possible_configs(3))
+
+
+def pickle(filename, object):
+    with gzip.open(filename, 'wb') as f:
+        cPickle.dump(object, f)
+
+def unpickle(filename):
+    with gzip.open(filename, 'rb') as f:
+        return (cPickle.load(f))
 
 
 if __name__=='__main__':
