@@ -80,6 +80,15 @@ def composeGMM(type=1):
         gmm.append(normalDist(array([-5.,15.]),
                               array([[5.,0.],
                                      [0.,5.]])))
+    elif type == 3:
+        gmm = GMM(N=1000)
+        gmm.append(normalDist(array([5.,5.]), 
+                              array([[20.,0.],
+                                     [0.,3.]])),
+                   0.5)
+        gmm.append(normalDist(array([-5.,-5.]),
+                              array([[20.,0.],
+                                     [0.,3.]])))
     return gmm
 
 def test(type, examples=False):

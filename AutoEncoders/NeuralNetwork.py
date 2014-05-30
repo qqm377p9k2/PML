@@ -31,7 +31,7 @@ class LabeledData(object):
     def generateBatches(self, learningModel):
         labels= self.training['labels']
         data  = self.training['data']
-        iodim = learningModel.ioDimension()
+        iodim = learningModel.ioDimensions()
         assert((labels.shape[1]==iodim['output'])&(data.shape[1]==iodim['input']))
         datasz = labels.shape[0]
         assert(mod(datasz, learningModel.batchsz)==0)
@@ -42,7 +42,7 @@ class LabeledData(object):
         return zip(data, labels)
     
 class Discriminants(object):
-    def ioDimension(self):
+    def ioDimensions(self):
         assert(False)
         return {'input':0, 'output':0}
 
@@ -115,7 +115,7 @@ class NeuralNetwork(batchLearningAlgorithms, Discriminants):
         else:
             assert(False)
 
-    def ioDimension(self):
+    def ioDimensions(self):
         return {'input':noUnits[0], 'output':noUnits[-1]}
 
     def noLayers(self):
