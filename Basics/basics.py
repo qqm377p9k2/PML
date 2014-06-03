@@ -60,6 +60,14 @@ def logSumExp(logZ, axis=None):
     shape[axis] = 1
     return log(sum(exp(logZ - logZmax.reshape(shape)), axis=axis)) + logZmax
 
+def logDiffExp(logZ, axis=None):
+    if axis is None:
+        axis = len(logZ.shape) -1 
+    logZmax = logZ.max(axis=axis)
+    shape = copy(logZ.shape)
+    shape[axis] = 1
+    return log(diff(exp(logZ - logZmax.reshape(shape)), axis=axis)) + logZmax
+
 def main():
     print(binary_expression(3,5))
     print(possible_configs(3))
