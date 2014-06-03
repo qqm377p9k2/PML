@@ -34,7 +34,7 @@ def genLogger(output, interval=10):
     return logger
 
 class RBM(object):
-    def __init__(self, M=None, N=None, shape=None, batchsz=100):
+    def __init__(self, M=None, N=None, shape=None, batchsz=100, init_lr=0.005, CDN=1):
         if shape:
             assert((M is None) and (N is None))
             M, N = shape
@@ -52,10 +52,10 @@ class RBM(object):
         self.algorithm = None
         self.epoch = 0
         self.particles = None
-        self.CDN = 1
+        self.CDN = CDN
         self.sparsity = {'strength': 0., 'target': 0.}
         #learning rates
-        self.lrate = variedParam(0.005)
+        self.lrate = variedParam(init_lr)
         self.drate = variedParam(1.0)
         self.mom   = variedParam(0.0, [['switchToAValueAt', 5, 0.9]])
 
@@ -162,15 +162,21 @@ class BRBM(RBM):
         for beta in betaseq[1:-1]:
             logw += (1-beta)*vis.dot(bA) + beta*vis.dot(bB) + ReL(beta*(vis.dot(WB.T)+aB)).sum(axis=1)
             prob = sigmoid(beta*(vis.dot(WB.T)+aB))
-            hid  =  prob > rand(*prob.shape)
+            hid  = prob > rand(*prob.shape)
             prob = sigmoid((1-beta)*bA + beta*(hid.dot(WB)+bB))
             vis  = prob > rand(*prob.shape)
             logw -= (1-beta)*vis.dot(bA) + beta*vis.dot(bB) + ReL(beta*(vis.dot(WB.T)+aB)).sum(axis=1)
         logw += vis.dot(bB) + ReL((vis.dot(WB.T)+aB)).sum(axis=1)
-        logZB = logSumExp(logw) + logZA
-        return logZB
+        r_AIS = logSumExp(logw) - log(N)
+        logZB = r_AIS + logZA 
 
-def basemodel_for(data, batchsz, debug=False):
+        meanlogw = logw.mean()
+        logstd_AIS = log(std(exp(logw-meanlogw))) + meanlogw -log(N)/2
+        logZB_est_bounds = (logSumExp(asarray([log(3)+logstd_AIS, 1./r_AIS]))+logZA,
+                            logSumExp(asarray([log(3)+logstd_AIS,    r_AIS]))+logZA)
+        return logZB, logZB_est_bounds
+
+def basemodel_for(data, batchsz=100, debug=False):
     #data = MNIST.data()
     N = data.dim
     rbm = BRBM(M=1, N=784)
@@ -180,6 +186,7 @@ def basemodel_for(data, batchsz, debug=False):
     nbatches = data.training.size/batchsz
     assert(data.training.size%batchsz == 0)
     batches = data.training.data.reshape((nbatches, batchsz, N))
+    batches = batches > random.rand(*batches.shape)
     for batch in batches:
         p += batch.sum(axis=0)
     p /= float(data.training.size)
