@@ -172,8 +172,8 @@ class BRBM(RBM):
 
         meanlogw = logw.mean()
         logstd_AIS = log(std(exp(logw-meanlogw))) + meanlogw -log(N)/2
-        logZB_est_bounds = (logSumExp(asarray([1./(log(3)+logstd_AIS),r_AIS]))+logZA,
-                            logSumExp(asarray([    log(3)+logstd_AIS, r_AIS]))+logZA)
+        logZB_est_bounds = (logDiffExp(asarray([log(3)+logstd_AIS, r_AIS]))[0]+logZA,
+                            logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         return logZB, logZB_est_bounds
 
 def basemodel_for(data, batchsz=100, debug=False):
