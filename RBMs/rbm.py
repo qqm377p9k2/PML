@@ -294,10 +294,32 @@ def show_samples_GRBM2d(N=100, verbose=False, hidden=False):
     plt.show()
     return v,h
 
-def make_test_GRBM():
+def show_fe(rbm, ext=[[-10, 10], [-10,10]]):
+    ext = asarray(ext)
+    X, Y = np.meshgrid(*mesh(ext))
+    XY = npcat((X[:, :, newaxis], Y[:, :, newaxis]), axis=2)
+    plt.imshow(np.exp(-rbm.fe(XY)), interpolation='bilinear', origin='lower', cmap=cm.gray, extent=ext.reshape(4))
+    plt.contour(X, Y, np.exp(-rbm.fe(XY)))
+    plt.show()
+
+
+def make_test_GRBM(dist=5):
     rbm = GRBM(2,2)
     theta = np.pi*0.45
-    rbm.W = 5*asarray([[1,0],[np.cos(theta), np.sin(theta)]])
+    rbm.W = dist*asarray([[1,0],[np.cos(theta), np.sin(theta)]])
+    rbm.b = -rbm.W.sum(axis=0)/2.
+    return rbm
+
+def make_test_GRBM3():
+    rbm = GRBM(20,2)
+    rbm.W *= 50
+    rbm.b = -rbm.W.sum(axis=0)/2.
+    return rbm
+
+def make_test_GRBM2(dist=4):
+    rbm = GRBM(2,2)
+    theta = np.pi*0.4
+    rbm.W = dist*asarray([[1,0],[np.cos(theta), np.sin(theta)]])
     rbm.b = -rbm.W.sum(axis=0)/2.
     return rbm
 
@@ -420,11 +442,11 @@ class GRBM(RBM):
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
 
-    def AIS(self, betaseq, N=100, base_rbm=None, mode='logZ'):
-        if not(base_rbm):
-            base_rbm = BRBM(M=self.M, N=self.N)
+    def AIS(self, betaseq, N=100, base_params=None, mode='logZ'):
+        if base_params is None:
+            base_params = self.cov(1.0)
         M = self.M
-        bA, sA = base_rbm.b, base_rbm.sigma
+        bA, sA = base_params[0], np.sqrt(diag(base_params[1]))
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
         logZA =M*log(2) + 0.5*self.N*log(2*np.pi) + log(sA).sum()
 
@@ -456,7 +478,9 @@ class GRBM(RBM):
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
-    def AIS_debug(self, betaseq, N=100, base_params=None, mode='logZ', pause_points=None, ext=([-10,10],[-10,10])):
+    def AIS_debug(self, betaseq, N=100, base_params=('mean', 'cov'), mode='logZ', pause_points=None, ext=([-10,10],[-10,10])):
+        if base_params is None:
+            base_params = self.cov(1.0)
         if pause_points==None:
             pause_points = (len(betaseq)-3)*ones(12)
             pause_points[:-1] = arange(0, len(betaseq), int(len(betaseq)/10.))
@@ -464,6 +488,7 @@ class GRBM(RBM):
         bA, sA = base_params[0], np.sqrt(diag(base_params[1]))
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
         logZA =M*log(2) + 0.5*self.N*log(2*np.pi) + log(sA).sum()
+        print 'logZA:', logZA
 
         prob = tile(bA, [N, 1])
         vis = randn(*prob.shape)*sA + prob
@@ -481,6 +506,7 @@ class GRBM(RBM):
                 print beta
                 fmap = np.exp(-0.5*((1-beta)*((XY-bA)/sA)**2 + beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB), WB.T, axes=[2,0])+aB)).sum(axis=2))
                 plt.imshow(fmap, interpolation='bilinear', origin='lower', cmap=cm.gray, extent=ext.reshape(4))
+                plt.scatter(vis[:,0], vis[:,1])
                 plt.show()
             logw += -0.5*((1-beta)*((vis-bA)/sA)**2 + beta*((vis-bB)/sB)**2).sum(axis=1) + ReL(beta*((vis/sB).dot(WB.T)+aB)).sum(axis=1)
             prob = sigmoid(beta*((vis/sB).dot(WB.T)+aB))
@@ -500,12 +526,14 @@ class GRBM(RBM):
         logZB_est_bounds = (logDiffExp(asarray([log(3)+logstd_AIS, r_AIS]))[0]+logZA,
                             logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         if mode == 'logZ':
-            return logZB, logZB_est_bounds, ESS
+            return logZB, logZB_est_bounds, ESS, r_AIS
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
 
     def AIS_cov(self, betaseq, base_params=None, N=100, mode='logZ'):
+        if base_params is None:
+            base_params = self.cov(1.1)
         M = self.M
         mu, cov = base_params
         covinv = linalg.inv(cov)
@@ -518,7 +546,7 @@ class GRBM(RBM):
 
         covxv = linalg.inv(diag(1/sB**2)+LA)
 
-        logZA =M*log(2) + 0.5*self.N*log(2*np.pi) - 0.5*log(linalg.det(cov))
+        logZA =M*log(2) + 0.5*self.N*log(2*np.pi) + 0.5*log(linalg.det(cov))
 
         vis = random.multivariate_normal(mu, cov, size=N)
         logw =  0.5*(((vis-mu).dot(covinv))*(vis-mu)).sum(axis=1) - M*log(2)
@@ -552,6 +580,8 @@ class GRBM(RBM):
 
 
     def AIS_cov_debug(self, betaseq, base_params=None, N=100, mode='logZ', pause_points=None, ext=([-10,10],[-10,10])):
+        if base_params is None:
+            base_params = self.cov(1.1)
         if pause_points==None:
             pause_points = (len(betaseq)-3)*ones(12)
             pause_points[:-1] = arange(0, len(betaseq), int(len(betaseq)/10.))
@@ -567,7 +597,8 @@ class GRBM(RBM):
 
         covxv = linalg.inv(diag(1/sB**2)+LA)
 
-        logZA =M*log(2) + 0.5*self.N*log(2*np.pi) - 0.5*log(linalg.det(cov))
+        logZA =M*log(2) + 0.5*self.N*log(2*np.pi) + 0.5*log(linalg.det(cov))
+        print 'logZA:', logZA
 
         vis = random.multivariate_normal(mu, cov, size=N)
         logw =  0.5*(((vis-mu).dot(covinv))*(vis-mu)).sum(axis=1) - M*log(2)
@@ -583,6 +614,7 @@ class GRBM(RBM):
                 #fmap = np.exp(-0.5*((1-beta)*((XY-bA)/sA)**2 + beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB), WB.T, axes=[2,0])+aB)).sum(axis=2))
                 fmap = np.exp(-0.5*((1-beta)*(np.tensordot((XY-mu), covinv, axes=[2,0]))*(XY-mu)).sum(axis=2) -0.5*(beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB),WB.T, axes=[2,0])+aB)).sum(axis=2))
                 plt.imshow(fmap, interpolation='bilinear', origin='lower', cmap=cm.gray, extent=ext.reshape(4))
+                plt.scatter(vis[:,0], vis[:,1])
                 plt.show()
             logw += -0.5*((1-beta)*((vis-mu).dot(covinv))*(vis-mu)).sum(axis=1) -0.5*(beta*((vis-bB)/sB)**2).sum(axis=1) + ReL(beta*((vis/sB).dot(WB.T)+aB)).sum(axis=1)
 
@@ -606,7 +638,7 @@ class GRBM(RBM):
         logZB_est_bounds = (logDiffExp(asarray([log(3)+logstd_AIS, r_AIS]))[0]+logZA,
                             logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         if mode == 'logZ':
-            return logZB, logZB_est_bounds, ESS
+            return logZB, logZB_est_bounds, ESS, r_AIS
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
@@ -625,11 +657,11 @@ class GRBM(RBM):
             v[i] = self.sampleV(h[i])[0]
         return v, h
 
-    def cov(self):
+    def cov(self, scale=1.05):
         v, h = self.sample(N=5000)
         N,nbatches,visnum = v.shape
         v = v[100:].reshape((N-100)*nbatches, visnum)
-        return v.mean(axis=0), cov(v.T)
+        return v.mean(axis=0), scale*cov(v.T)
 
 
 def base_GRBM_for(data, batchsz=100, debug=False):
@@ -642,7 +674,7 @@ def base_GRBM_for(data, batchsz=100, debug=False):
     return rbm
 
 
-def load_RBM_mat(dir='M20'):
+def load_RBM_mat(dir='M20', data=True):
     import scipy.io as sio
     name = dir+'/rbm.mat'
     params = sio.loadmat(name)
@@ -655,9 +687,11 @@ def load_RBM_mat(dir='M20'):
     rbm.a = asarray(a, dtype='>d')
     rbm.b = asarray(b, dtype='>d')
     rbm.sigma = asarray(sigma[:-1], dtype='>d')
-    name = dir+'/train.mat'
-    data = sio.loadmat(name)
-    data = asarray(data['train'], dtype='>d')
+    data = None
+    if data:
+        name = dir+'/train.mat'
+        data = sio.loadmat(name)
+        data = asarray(data['train'], dtype='>d')
     return rbm, data
 
 
