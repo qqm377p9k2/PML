@@ -30,7 +30,7 @@ class GaussianMixture(object):
         self.dists.append(dist)
 
     def sample(self):
-        assert(sum(array(self.ratios))==1.)
+        assert(abs(sum(array(self.ratios))-1.)<1e-6)
         assert(sum(array(self.__noDataPoints))==self.noDataPoints)
         self.__data = [d.sample(N) for d,N in zip(self.dists, self.__noDataPoints)]
         return self
