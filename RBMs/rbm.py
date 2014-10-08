@@ -1,12 +1,12 @@
 import __builtin__ as base
 from numpy import *
-from Ising.numpy_ import *
+from Basics.numpy_ import *
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
-
+from Basics.utils import measuring_speed
 
 import cPickle, gzip
 
@@ -310,6 +310,13 @@ def make_test_GRBM(dist=5):
     rbm.b = -rbm.W.sum(axis=0)/2.
     return rbm
 
+def make_test_GRBM4(dist=3):
+    rbm = GRBM(2,2)
+    theta = np.pi*0.4
+    rbm.W = dist*asarray([[1,0],[np.cos(theta), np.sin(theta)]])
+    rbm.b = -rbm.W.sum(axis=0)/2.
+    return rbm
+
 def make_test_GRBM3():
     rbm = GRBM(20,2)
     rbm.W *= 50
@@ -478,12 +485,21 @@ class GRBM(RBM):
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
-    def AIS_debug(self, betaseq, N=100, base_params=('mean', 'cov'), mode='logZ', pause_points=None, ext=([-10,10],[-10,10])):
+    def AIS_mean(self, betaseq, N=100, base_params=None, mode='logZ'):
+        if base_params is None:
+            base_params = self.cov(1.0)
+        base_params = base_params[0], diag(self.sigma)**2
+        return self.AIS(betaseq, N, base_params, mode)
+
+
+    def AIS_debug(self, betaseq, N=100, base_params=None, mode='logZ', pause_points=None, ext=([-10,10],[-10,10]), save=None):
         if base_params is None:
             base_params = self.cov(1.0)
         if pause_points==None:
             pause_points = (len(betaseq)-3)*ones(12)
             pause_points[:-1] = arange(0, len(betaseq), int(len(betaseq)/10.))
+        pause_points = asarray(pause_points, dtype=int)
+        print zip(betaseq[pause_points], pause_points)
         M = self.M
         bA, sA = base_params[0], np.sqrt(diag(base_params[1]))
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
@@ -505,9 +521,17 @@ class GRBM(RBM):
             if i in pause_points:
                 print beta
                 fmap = np.exp(-0.5*((1-beta)*((XY-bA)/sA)**2 + beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB), WB.T, axes=[2,0])+aB)).sum(axis=2))
+                fig = plt.figure()
+                ax = fig.add_subplot(111, aspect='equal')
                 plt.imshow(fmap, interpolation='bilinear', origin='lower', cmap=cm.gray, extent=ext.reshape(4))
-                plt.scatter(vis[:,0], vis[:,1])
-                plt.show()
+                plt.scatter(vis[:,0], vis[:,1], c='cyan', s=30)
+                ax.set_xlim(*ext[0])
+                ax.set_ylim(*ext[1])
+                ax.set_axis_off()
+                if save:
+                    plt.savefig(save+'%g.png'%beta, bbox_inches='tight')
+                else:
+                    plt.show()
             logw += -0.5*((1-beta)*((vis-bA)/sA)**2 + beta*((vis-bB)/sB)**2).sum(axis=1) + ReL(beta*((vis/sB).dot(WB.T)+aB)).sum(axis=1)
             prob = sigmoid(beta*((vis/sB).dot(WB.T)+aB))
             hid  = prob > rand(*prob.shape)
@@ -579,7 +603,7 @@ class GRBM(RBM):
             return (hid, vis), logZB, logZB_est_bounds
 
 
-    def AIS_cov_debug(self, betaseq, base_params=None, N=100, mode='logZ', pause_points=None, ext=([-10,10],[-10,10])):
+    def AIS_cov_debug(self, betaseq, base_params=None, N=100, mode='logZ', pause_points=None, ext=([-10,10],[-10,10]), save=None):
         if base_params is None:
             base_params = self.cov(1.1)
         if pause_points==None:
@@ -612,10 +636,18 @@ class GRBM(RBM):
             if i in pause_points:
                 print beta
                 #fmap = np.exp(-0.5*((1-beta)*((XY-bA)/sA)**2 + beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB), WB.T, axes=[2,0])+aB)).sum(axis=2))
+                fig = plt.figure()
+                ax = fig.add_subplot(111, aspect='equal')
                 fmap = np.exp(-0.5*((1-beta)*(np.tensordot((XY-mu), covinv, axes=[2,0]))*(XY-mu)).sum(axis=2) -0.5*(beta*((XY-bB)/sB)**2).sum(axis=2) + ReL(beta*(np.tensordot((XY/sB),WB.T, axes=[2,0])+aB)).sum(axis=2))
                 plt.imshow(fmap, interpolation='bilinear', origin='lower', cmap=cm.gray, extent=ext.reshape(4))
-                plt.scatter(vis[:,0], vis[:,1])
-                plt.show()
+                plt.scatter(vis[:,0], vis[:,1], c='cyan', s=30)
+                ax.set_xlim(*ext[0])
+                ax.set_ylim(*ext[1])
+                ax.set_axis_off()
+                if save:
+                    plt.savefig(save+'%g.png'%beta, bbox_inches='tight')
+                else:
+                    plt.show()
             logw += -0.5*((1-beta)*((vis-mu).dot(covinv))*(vis-mu)).sum(axis=1) -0.5*(beta*((vis-bB)/sB)**2).sum(axis=1) + ReL(beta*((vis/sB).dot(WB.T)+aB)).sum(axis=1)
 
             prob = sigmoid(beta*((vis/sB).dot(WB.T)+aB))
@@ -648,20 +680,72 @@ class GRBM(RBM):
         return logZ
 
 
-    def sample(self, N=100, nbatches=100):
+    def computeMoments(self):
+        assert(self.M < 30)
+        logZ = logSumExp(asarray([logSumExp(-self.feh(c)) for c in RBM.all_configs(self.M, LBS=12)]))
+        return logZ
+
+    def sample(self, N=100, nbatches=100, radius=5., v0=None):
+        if v0 is None:
+            v0 = radius*randn(nbatches, self.shape[1])
         v = zeros((N, nbatches, self.shape[1]))
         h = zeros((N, nbatches, self.shape[0]))
-        v[0] = 5*randn(nbatches, self.shape[1])
+        v[0] = v0
         for i in xrange(1,N):
             h[i] = self.sampleH(v[i-1])[0]
             v[i] = self.sampleV(h[i])[0]
         return v, h
 
-    def cov(self, scale=1.05):
-        v, h = self.sample(N=5000)
+    def cov(self, scale=1.05, N=100, T=5000, radius=5.):
+        v, h = self.sample(N=T, nbatches=N, radius=radius)
         N,nbatches,visnum = v.shape
         v = v[100:].reshape((N-100)*nbatches, visnum)
         return v.mean(axis=0), scale*cov(v.T)
+
+    def cov2(self, scale=1.05, nbatches=100, T=5000, tbatches=100, radius=5.):
+        v, h = self.sample(N=100, nbatches=nbatches, radius=radius)
+        visnum = self.N
+        mvv = zeros((visnum, visnum))
+        mv  = zeros(visnum)
+        for i in xrange(T/tbatches):
+            v, h = self.sample(N=tbatches, nbatches=nbatches, v0=v[-1])
+            tmp = v.reshape(tbatches*nbatches, visnum)
+            mvv += tmp.T.dot(tmp)
+            mv  += tmp.sum(axis=0)
+        mv  /= (T*nbatches-1)
+        mvv /= (T*nbatches-1)
+        return mv, scale*(mvv - mv[:,newaxis].dot(mv[newaxis,:]))
+
+
+    def sample_geometric_avr_cov(self, beta, base_params=None, nbatches=100, T=1000):
+        if base_params is None:
+            base_params = self.cov(1.1)
+        mu, cov = base_params
+        covinv = linalg.inv(cov)
+        #coveig = linalg.eigh(cov)
+        WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
+        LA = linalg.inv(cov-np.diag(sB**2))
+        LAeig = linalg.eigh(LA)[0]
+        print LAeig
+        assert((LAeig>0).all())
+
+        covxv = linalg.inv(diag(1/sB**2)+LA)
+
+        v = zeros((T, nbatches, self.N))
+        x = zeros((T, nbatches, self.N))
+        h = zeros((T, nbatches, self.M))
+        v[0] = random.randn(nbatches, self.N)
+
+        for i in xrange(T-1):
+            prob = sigmoid(beta*((v[i]/sB).dot(WB.T)+aB))
+            h[i]  = prob > rand(*prob.shape)
+            prob = (v[i]/sB**2+mu.dot(LA)).dot(covxv)
+            x[i] = random.multivariate_normal(zeros(self.N), covxv/(1-beta), nbatches) + prob
+
+            prob = (beta*(h[i].dot(sB*WB)+bB) + (1-beta)*x[i])
+            v[i+1] = randn(*prob.shape)*sB + prob
+
+        return v,x,h
 
 
 def base_GRBM_for(data, batchsz=100, debug=False):
@@ -692,7 +776,9 @@ def load_RBM_mat(dir='M20', data=True):
         name = dir+'/train.mat'
         data = sio.loadmat(name)
         data = asarray(data['train'], dtype='>d')
-    return rbm, data
+        return rbm, data
+    else:
+        return rbm
 
 
 def monitorInit():
@@ -738,5 +824,5 @@ def testGRBM():
                     monitor = monitor))
 
 if __name__ == "__main__":
-    testBRBM()
+    pass
 
