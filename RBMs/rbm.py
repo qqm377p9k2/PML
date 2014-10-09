@@ -207,6 +207,42 @@ class BRBM(RBM):
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
 
+    def fe(self, v):
+        W, a, b = self.W, self.a, self.b
+        axis = len(v.shape)-1
+        return -(v*b).sum(axis=axis) - log(1+exp(dot(v,W.T)+ a)).sum(axis=axis) 
+
+    def exact_grad(self, data):
+        assert(self.N < 20)
+        LBS = 12
+        W, a, b = self.W, self.a, self.b
+        #positive grad
+        batchsz = float(self.batchsz)
+        dWpos, dapos, dbpos = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        for item in data: ##sampled data vectors
+            eh = self.expectH(item)          #expected H vectors
+            dWpos += dot(eh.T, item)/batchsz
+            dapos += mean(eh,axis=0)
+            dbpos += mean(item,axis=0)
+        dWpos /= data.shape[0]
+        dapos /= data.shape[0]
+        dbpos /= data.shape[0]
+        #negative grad
+        dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        logZ = zeros(max(2**(self.N-LBS), 1))
+        for i,c in enumerate(RBM.all_configs(self.N, LBS=12)):
+            eh = self.expectH(c)
+            unpv = exp(-self.fe(c)) #unnormalized p(v)
+            dWneg += dot(eh.T*unpv, c)
+            daneg += (eh*unph[:, newaxis]).sum(axis=0)
+            dbneg += (c*unph[:, newaxis]).sum(axis=0)
+            logZ[i] = logSumExp(-self.fe(c))
+        logZ = logSumExp(logZ)
+        dWneg /= exp(logZ)
+        daneg /= exp(logZ)
+        dbneg /= exp(logZ)
+        return (dWpos, dapos, dbpos), (dWneg, daneg, dbneg), logZ
+
     def AIS(self, betaseq, N=100, base_rbm=None, mode='logZ'):
         if not(base_rbm):
             base_rbm = BRBM(M=self.M, N=self.N)
@@ -283,6 +319,7 @@ def show_samples_GRBM2d(N=100, verbose=False, hidden=False):
     rbm.b = -rbm.W.sum(axis=0)/2.
 
     v,h = rbm.sample(N)
+    v = v.reshape(v.shape[0]*v.shape[1], v.shape[2])
     plt.scatter(v[:,0], v[:,1])
 
     ext = ranges(v.T)
@@ -338,6 +375,8 @@ def show_GRBM_fe(beta=1., N=100):
     rbm.b = -rbm.W.sum(axis=0)/2.
 
     v,h = rbm.sample(N)
+    print v.shape
+    v = v.reshape(v.shape[0]*v.shape[1], v.shape[2])
 
     ext = ranges(v.T)
     print ext.reshape(4)
@@ -448,6 +487,74 @@ class GRBM(RBM):
             self.b = drate*self.b + self.vb
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
+
+    def exact_grad(self, data):
+        assert(self.M < 20)
+        LBS = 12
+        W, a, b = self.W, self.a, self.b
+        #positive grad
+        batchsz = float(self.batchsz)
+        dWpos, dapos, dbpos = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        for item in data: ##sampled data vectors
+            eh = self.expectH(item)          #expected H vectors
+            dWpos += dot(eh.T, item/self.sigma)/batchsz
+            dapos += mean(eh,axis=0)
+            dbpos += mean((item-self.b)/(self.sigma**2),axis=0)
+        dWpos /= data.shape[0]
+        dapos /= data.shape[0]
+        dbpos /= data.shape[0]
+        #negative grad
+        dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        logZ = zeros(max(2**(self.M-LBS), 1))
+        for i,c in enumerate(RBM.all_configs(self.M, LBS=12)):
+            ev = self.expectV(c)
+            unph = exp(-self.feh(c)) #unnormalized p(h)
+            dWneg += dot(c.T*unph, ev/self.sigma)
+            daneg += (c*unph[:, newaxis]).sum(axis=0)
+            dbneg += (((ev-self.b)/(self.sigma**2))*unph[:, newaxis]).sum(axis=0)
+            logZ[i] = logSumExp(-self.feh(c))
+        #logZ = logSumExp(asarray([logSumExp(-self.feh(c)) for c in RBM.all_configs(self.M, LBS=LBS)]))
+        logZ = logSumExp(logZ)
+        dWneg /= exp(logZ)
+        daneg /= exp(logZ)
+        dbneg /= exp(logZ)
+        return (dWpos, dapos, dbpos), (dWneg, daneg, dbneg), logZ
+
+    def exact_natgrad(self, data):
+        assert(self.M < 20)
+        LBS = 12
+        W, a, b = self.W, self.a, self.b
+        #positive grad
+        batchsz = float(self.batchsz)
+        dWpos, dapos, dbpos = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        for item in data: ##sampled data vectors
+            eh = self.expectH(item)          #expected H vectors
+            dWpos += dot(eh.T, item/self.sigma)/batchsz
+            dapos += mean(eh,axis=0)
+            dbpos += mean((item-self.b)/(self.sigma**2),axis=0)
+        dWpos /= data.shape[0]
+        dapos /= data.shape[0]
+        dbpos /= data.shape[0]
+        #negative grad
+        dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        nparams = (self.N+1)*(self.M+1)-1
+        dfcov, dfmean = zeros((nparams, nparams)), zeros(nparams)
+        logZ = zeros(max(2**(self.M-LBS), 1))
+        for i,c in enumerate(RBM.all_configs(self.M, LBS=12)):
+            ev = self.expectV(c)
+            unph = exp(-self.feh(c)) #unnormalized p(h)
+            dWneg += dot(c.T*unph, ev/self.sigma)
+            daneg += (c*unph[:, newaxis]).sum(axis=0)
+            dbneg += (((ev-self.b)/(self.sigma**2))*unph[:, newaxis]).sum(axis=0)
+            #dfcov += 
+            #dfmean+= 
+            logZ[i] = logSumExp(-self.feh(c))
+        #logZ = logSumExp(asarray([logSumExp(-self.feh(c)) for c in RBM.all_configs(self.M, LBS=LBS)]))
+        logZ = logSumExp(logZ)
+        dWneg /= exp(logZ)
+        daneg /= exp(logZ)
+        dbneg /= exp(logZ)
+        return (dWpos, dapos, dbpos), (dWneg, daneg, dbneg), logZ
 
     def AIS(self, betaseq, N=100, base_params=None, mode='logZ'):
         if base_params is None:
