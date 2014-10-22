@@ -420,6 +420,10 @@ class BRBM(RBM):
 
     def AIS_NG(self, learning_rates, N=100, base_rbm=None, data=None, mode='logZ', threshold=0.03, verbose=True):
         'AIS with natural gradient'
+        if data is None:
+            print 'Collecting target samples...'
+            data = self.gen_train_samples(size=50,nbatches=1000)
+            print 'Done'
         if not(base_rbm):
             print 'Computing the initial parameters...'
             #base_rbm = BRBM(M=self.M, N=self.N)
@@ -427,16 +431,10 @@ class BRBM(RBM):
             pm[pm<0.01] = 0.01
             bA = log(pm) - log(1-pm)
             print 'Done'
-        if data is None:
-            print 'Collecting target samples...'
-            data = self.gen_train_samples(size=50,nbatches=1000)
-            print 'Done'
         nbatches=data.shape[0]/self.batchsz
         data = data.reshape(nbatches, self.batchsz, data.shape[1])
 
         #base
-        plt.imshow(bA.reshape(28,28))
-        plt.draw()
         MA = self.M
         logZA =MA*log(2) + ReL(bA).sum()
         #sample from pA
@@ -472,10 +470,10 @@ class BRBM(RBM):
         norm  = weight.sum()
 
         #init fisher metric
-        flag = False
+        flag = True
         if flag:
-            fisher_inv.X = zeros((N+1, paramnum), dtype=float)
-            Ginv,G = fisher_inv(dfe(vis), weight)
+            fisher_inv_naive.Gtmp= zeros((paramnum, paramnum), dtype=float)
+            Ginv = fisher_inv_naive(dfe(visold), weight)
         #
         X = zeros((N+1, paramnum), dtype=float)
         Dinv = zeros(N+1, dtype=float)
@@ -493,9 +491,9 @@ class BRBM(RBM):
                 print 'NLL:%g'%NLL
                 ERR = BRBM.compute_err_of((W,a,b), data)
                 print 'ERR:%g'%ERR
-                plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(1000)/50)),50)))
+                #plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(1000)/50)),50)))
                 #plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/20)),20)))
-                plt.draw()
+                #plt.draw()
                 
             #param update by natural gradient
             dW = sigmoid(data[i%nbatches].dot(W.T)+a).T.dot(data[i%nbatches])/self.batchsz 
@@ -503,6 +501,8 @@ class BRBM(RBM):
             da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(visold.dot(W.T)+a)*weight).sum(axis=0)/norm
             db = data[i%nbatches].mean(axis=0) - (visold*weight).sum(axis=0)/norm
             if flag:
+                print Ginv[1].shape
+                print da.shape
                 dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
                             np.tensordot(Ginv[1], da, axes=([2], [0])) + 
                             np.tensordot(Ginv[2], db, axes=([2], [0])))
@@ -514,7 +514,10 @@ class BRBM(RBM):
                             np.dot(Ginv[5], db))
             flag2= False
             natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight, flag2)
+            print dW_ng
             dW_ng, da_ng, db_ng = natgrad
+            print dW_ng
+            return 0
             W += lr*dW_ng
             a += lr*da_ng
             b += lr*db_ng
@@ -534,7 +537,7 @@ class BRBM(RBM):
                 sqdist_tmp = 0.
                 X, Dinv= update_X(dfe(visold), X, Dinv, weight)
                 if flag:
-                    Ginv,G = fisher_inv(dfe(visold), weight)
+                    Ginv = fisher_inv_naive(dfe(visold), weight)
 
             #sample
             prob = sigmoid(vis.dot(W.T)+a)
@@ -595,6 +598,10 @@ class BRBM(RBM):
             err += -((d*log(prob)+(1-d)*log(1-prob)).sum(axis=1)).mean()
         return err/len(data)
 
+def test_AIS_NG():
+    rbm = BRBM(M=2, N=2)
+    rbm.AIS_NG(0.01*ones(5), N=5)
+
 def update_X(dfe, X, Dinv, weight):
     dW_, da_, db_ = dfe
     vnum = db_.shape[1]
@@ -629,12 +636,12 @@ def compute_NG(dparams, shape, X, Dinv, weight, flag=True):
     dparams[M*N:M*N+M] = da
     dparams[M*N+M:] = db
 
-    #Gtmp = (X.T*Dinv).dot(X)
     #compute inverse of (lI+G)
     l = 1.
-    #I = eye(nparams, dtype=float)
-    #Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
-    #Ginv[arange(nparams), arange(nparams)] += 1/l 
+    Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
+    Ginv[arange(M*N+M+N), arange(M*N+M+N)] += 1/l 
+    print 'Ginv'
+    print Ginv
     if flag:
         dparams_nat = dparams/l - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l).dot(X.dot(dparams)))/(l**2)
     else:
@@ -647,91 +654,9 @@ def compute_NG(dparams, shape, X, Dinv, weight, flag=True):
     return natgrad, dmetric
 
 
-
-def approx_matrix_inv(A, V_0=None, niter=100):
-    '''
-    Approximate an inverse of a matrix A
-    by using an iterative method that is
-    invented by Li and Li (2010)
-    '''
-    if V_0 is None:
-        V_0 = 0.001*random.randn(*A.shape)
-    V = V_0.copy()
-    I = eye(A.shape[0], dtype=float)
-    for i in xrange(niter):
-        AV = A.dot(V)
-        #V = V.dot(3*I - AV.dot(3*I-AV))
-        V = V.dot(7*I + AV.dot(-21*I + AV.dot(35*I+AV.dot(-35*I + AV.dot(21*I+AV.dot(-7*I+AV))))))
-    return V
-        
-
-def apply_metric(G, vec):
-    dW, da, db = vec
-    dW_ = (np.tensordot(G[0], dW, axes=([2,3], [0,1])) + 
-           np.tensordot(G[1], da, axes=([2], [0])) + 
-           np.tensordot(G[2], db, axes=([2], [0])))
-    da_ = (np.tensordot(G[1], dW, axes=([0,1], [0,1])) + 
-           np.dot(G[3], da) +
-           np.dot(G[4], db))
-    db_ = (np.tensordot(G[2], dW, axes=([0,1], [0,1])) +
-           np.dot(G[4].T, da) +
-           np.dot(G[5], db))
-    return dW_, da_, db_
-
-
-@static_var('X', None)
-def fisher_inv(dfe, weight=None):
-    X=fisher_inv.X
-    dW_, da_, db_ = dfe
-    vnum = db_.shape[1]
-    hnum = da_.shape[1]
-    vhnum=vnum*hnum
-    nparams = vhnum+hnum+vnum
-    N = dW_.shape[0]
-    if weight is None:
-        weight = ones(N, dtype=float)
-        weight = weight[:, newaxis]
-    norm = weight.sum()
-    #
-    dWm_ = (dW_*weight).sum(axis=0)/norm
-    dam_ = (da_*weight).sum(axis=0)/norm
-    dbm_ = (db_*weight).sum(axis=0)/norm
-
-    Dinv = zeros(N+1, dtype=float)
-    X[:-1, :vhnum] = dW_
-    X[:-1, vhnum:vhnum+hnum] = da_
-    X[:-1, vhnum+hnum:] = db_
-    X[-1, :vhnum] = dWm_
-    X[-1, vhnum:vhnum+hnum] = dam_
-    X[-1, vhnum+hnum:] = dbm_
-    Dinv[arange(N)] = weight.flat/norm
-    Dinv[-1] = -1.
-
-    Gtmp = (X.T*Dinv).dot(X)
-    #compute inverse of (lI+G)
-    l = 1.
-    I = eye(nparams, dtype=float)
-    Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
-    Ginv[arange(nparams), arange(nparams)] += 1/l 
-
-    #return as tensors
-    Ginv = (Ginv[:vhnum, :vhnum].reshape(hnum,vnum,hnum,vnum), 
-            Ginv[:vhnum, vhnum:vhnum+hnum].reshape(hnum, vnum, hnum),
-            Ginv[:vhnum, vhnum+hnum:].reshape(hnum, vnum, vnum),
-            Ginv[vhnum:vhnum+hnum, vhnum:vhnum+hnum], 
-            Ginv[vhnum:vhnum+hnum, vhnum+hnum:], 
-            Ginv[vhnum+hnum:, vhnum+hnum:])
-    G    = (Gtmp[:vhnum, :vhnum].reshape(hnum,vnum,hnum,vnum), 
-            Gtmp[:vhnum, vhnum:vhnum+hnum].reshape(hnum, vnum, hnum),
-            Gtmp[:vhnum, vhnum+hnum:].reshape(hnum, vnum, vnum),
-            Gtmp[vhnum:vhnum+hnum, vhnum:vhnum+hnum], 
-            Gtmp[vhnum:vhnum+hnum, vhnum+hnum:], 
-            Gtmp[vhnum+hnum:, vhnum+hnum:])
-    return Ginv, G
-
 @static_var('Gtmp', None)
-def fisher_inv_old2(dfe, weight=None):
-    Gtmp=fisher_inv.Gtmp
+def fisher_inv_naive(dfe, weight=None):
+    Gtmp=fisher_inv_naive.Gtmp
     dW_, da_, db_ = dfe
     vnum = db_.shape[1]
     hnum = da_.shape[1]
@@ -757,11 +682,15 @@ def fisher_inv_old2(dfe, weight=None):
     Gtmp[vhnum+hnum:, :vhnum]           = Gtmp[:vhnum, vhnum+hnum:].T
     Gtmp[vhnum+hnum:, vhnum:vhnum+hnum] = Gtmp[vhnum:vhnum+hnum, vhnum+hnum:].T
     #compute inverse
-    if False:
-        Ginv = np.linalg.inv(Gtmp+0.01*eye(Gtmp.shape[0]))
-    elif True:
-        A = Gtmp+0.01*eye(Gtmp.shape[0])
-        Ginv = approx_matrix_inv(A, V_0=eye(Gtmp.shape[0])/(np.sqrt(np.sum(A**2))), niter=50)
+    l = 1.
+    Ginv = np.linalg.inv(l*eye(Gtmp.shape[0]) + Gtmp)
+    print 'fisher_inv_naive'
+    print 'G'
+    print Gtmp
+    print 'Ginv'
+    print Ginv
+    #A = Gtmp+0.01*eye(Gtmp.shape[0])
+    #Ginv = approx_matrix_inv(A, V_0=eye(Gtmp.shape[0])/(np.sqrt(np.sum(A**2))), niter=50)
 
     #return as tensors
     Ginv = (Ginv[:vhnum, :vhnum].reshape(hnum,vnum,hnum,vnum), 
@@ -770,40 +699,7 @@ def fisher_inv_old2(dfe, weight=None):
             Ginv[vhnum:vhnum+hnum, vhnum:vhnum+hnum], 
             Ginv[vhnum:vhnum+hnum, vhnum+hnum:], 
             Ginv[vhnum+hnum:, vhnum+hnum:])
-    G    = (Gtmp[:vhnum, :vhnum].reshape(hnum,vnum,hnum,vnum), 
-            Gtmp[:vhnum, vhnum:vhnum+hnum].reshape(hnum, vnum, hnum),
-            Gtmp[:vhnum, vhnum+hnum:].reshape(hnum, vnum, vnum),
-            Gtmp[vhnum:vhnum+hnum, vhnum:vhnum+hnum], 
-            Gtmp[vhnum:vhnum+hnum, vhnum+hnum:], 
-            Gtmp[vhnum+hnum:, vhnum+hnum:])
-    return Ginv, G
-
-def fisher_inv_org(dfe):
-    dW_, da_, db_ = dfe(vis)
-    dWm_, dam_, dbm_ = dW_.mean(axis=0), da_.mean(axis=0), db_.mean(axis=0)
-    #diagonal submatrices
-    G[:vhnum, :vhnum]                     = dW_.T.dot(dW_)/N - dWm_[:, newaxis]*dWm_
-    G[vhnum:vhnum+hnum, vhnum:vhnum+hnum] = da_.T.dot(da_)/N - dam_[:, newaxis]*dam_
-    G[vhnum+hnum:, vhnum+hnum:]           = db_.T.dot(db_)/N - dbm_[:, newaxis]*dbm_
-    #upper-triangle submatrices
-    G[:vhnum, vhnum:vhnum+hnum]      = dW_.T.dot(da_)/N - dWm_[:, newaxis]*dam_
-    G[:vhnum, vhnum+hnum:]           = dW_.T.dot(db_)/N - dWm_[:, newaxis]*dbm_
-    G[vhnum:vhnum+hnum, vhnum+hnum:] = da_.T.dot(db_)/N - dam_[:, newaxis]*dbm_
-    #lower-triangle submatrices
-    G[vhnum:vhnum+hnum,:vhnum]       = G[:vhnum, vhnum:vhnum+hnum].T
-    G[vhnum+hnum:, :vhnum]           = G[:vhnum, vhnum+hnum:].T
-    G[vhnum+hnum:, vhnum:vhnum+hnum] = G[vhnum:vhnum+hnum, vhnum+hnum:].T
-    #compute inverse
-    G = np.linalg.eigh(G)
-    #return as tensors
-    Ginv = (G[:vhnum, :vhnum].reshape(hnum,vnum,hnum,vnum), 
-            G[:vhnum, vhnum:vhnum+hnum].reshape(hnum, vnum, hnum),
-            G[:vhnum, vhnum+hnum:].reshape(hnum, vnum, vnum),
-            G[vhnum:vhnum+hnum, vhnum:vhnum+hnum], 
-            G[vhnum:vhnum+hnum, vhnum+hnum:], 
-            G[vhnum+hnum:, vhnum+hnum:])
     return Ginv
-
 
 
 def basemodel_for(data, batchsz=100, debug=False):
