@@ -418,11 +418,14 @@ class BRBM(RBM):
 
         return logw
 
-    def AIS_NG(self, learning_rates, N=100, base_rbm=None, data=None, mode='logZ', threshold=0.1, verbose=True):
+    def AIS_NG(self, learning_rates, N=100, base_rbm=None, data=None, mode='logZ', threshold=0.03, verbose=True):
         'AIS with natural gradient'
         if not(base_rbm):
             print 'Computing the initial parameters...'
-            base_rbm = BRBM(M=self.M, N=self.N)
+            #base_rbm = BRBM(M=self.M, N=self.N)
+            pm = data.mean(axis=0)
+            pm[pm<0.01] = 0.01
+            bA = log(pm) - log(1-pm)
             print 'Done'
         if data is None:
             print 'Collecting target samples...'
@@ -432,8 +435,9 @@ class BRBM(RBM):
         data = data.reshape(nbatches, self.batchsz, data.shape[1])
 
         #base
-        bA = base_rbm.b
-        MA = base_rbm.shape[0]
+        plt.imshow(bA.reshape(28,28))
+        plt.draw()
+        MA = self.M
         logZA =MA*log(2) + ReL(bA).sum()
         #sample from pA
         prob = sigmoid(tile(bA, [N, 1]))
@@ -468,49 +472,69 @@ class BRBM(RBM):
         norm  = weight.sum()
 
         #init fisher metric
-        fisher_inv.Gtmp = zeros((paramnum, paramnum))
-        Ginv,G = fisher_inv(dfe(vis), weight)
+        flag = False
+        if flag:
+            fisher_inv.X = zeros((N+1, paramnum), dtype=float)
+            Ginv,G = fisher_inv(dfe(vis), weight)
+        #
+        X = zeros((N+1, paramnum), dtype=float)
+        Dinv = zeros(N+1, dtype=float)
+        X, Dinv= update_X(dfe(visold), X, Dinv, weight)
 
         if verbose:
             print 'Starting AIS runs...'
 
         for i,lr in enumerate(learning_rates[:-1]):
-            if verbose and (i%(len(learning_rates)/100) == 0):
+            if verbose and (i%max(5,len(learning_rates)/100) == 0):
                 print 'i:%g'%i
                 print 'square Riemannian dist:%g'%(sqdist+sqdist_tmp)
                 print 'ESS:%g/%g'%((weight.sum()**2)/(weight**2).sum(), N)
-                NLL = -(asarray([vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1) for d in data]).sum()/(nbatches*self.batchsz) - (r_AIS + logZA))
+                NLL = -(asarray([d.dot(b) + ReL(d.dot(W.T)+a).sum(axis=1) for d in data]).sum()/(nbatches*self.batchsz) - (r_AIS + logZA))
                 print 'NLL:%g'%NLL
+                ERR = BRBM.compute_err_of((W,a,b), data)
+                print 'ERR:%g'%ERR
+                plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(1000)/50)),50)))
+                #plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/20)),20)))
+                plt.draw()
+                
             #param update by natural gradient
             dW = sigmoid(data[i%nbatches].dot(W.T)+a).T.dot(data[i%nbatches])/self.batchsz 
             dW-= (sigmoid(visold.dot(W.T)+a)*weight).T.dot(visold)/norm
             da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(visold.dot(W.T)+a)*weight).sum(axis=0)/norm
             db = data[i%nbatches].mean(axis=0) - (visold*weight).sum(axis=0)/norm
-            dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
-                        np.tensordot(Ginv[1], da, axes=([2], [0])) + 
-                        np.tensordot(Ginv[2], db, axes=([2], [0])))
-            da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
-                        np.dot(Ginv[3], da) +
-                        np.dot(Ginv[4], db))
-            db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
-                        np.dot(Ginv[4].T, da) +
-                        np.dot(Ginv[5], db))
-            W += dW_ng
-            a += da_ng
-            b += db_ng
-            sqdist_tmp += (dW_ng*dW).sum() + (da_ng*da).sum() + (db_ng*db).sum()
+            if flag:
+                dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
+                            np.tensordot(Ginv[1], da, axes=([2], [0])) + 
+                            np.tensordot(Ginv[2], db, axes=([2], [0])))
+                da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
+                            np.dot(Ginv[3], da) +
+                            np.dot(Ginv[4], db))
+                db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
+                            np.dot(Ginv[4].T, da) +
+                            np.dot(Ginv[5], db))
+            flag2= False
+            natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight, flag2)
+            dW_ng, da_ng, db_ng = natgrad
+            W += lr*dW_ng
+            a += lr*da_ng
+            b += lr*db_ng
+            sqdist_tmp += (lr**2)*dmetric
 
             #pos AIS weight update
             logw += vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1)
             weight= np.exp(logw)[:, newaxis]
+            if flag2:
+                weight = ones(logw.shape)[:, newaxis]
             norm  = weight.sum()
             visold = vis.copy()##
 
             #update G
             if sqdist_tmp > threshold:
-                sqdist += sqrdist_tmp
+                sqdist += sqdist_tmp
                 sqdist_tmp = 0.
-                Ginv,G = fisher_inv(dfe(vis), weight)
+                X, Dinv= update_X(dfe(visold), X, Dinv, weight)
+                if flag:
+                    Ginv,G = fisher_inv(dfe(visold), weight)
 
             #sample
             prob = sigmoid(vis.dot(W.T)+a)
@@ -527,15 +551,18 @@ class BRBM(RBM):
         dW-= (sigmoid(vis.dot(W.T)+a)*weight).T.dot(vis)/norm
         da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(vis.dot(W.T)+a)*weight).sum(axis=0)/norm
         db = data[i%nbatches].mean(axis=0) - (vis*weight).sum(axis=0)/norm
-        dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
-                    np.tensordot(Ginv[1], da, axes=([2], [0])) + 
-                    np.tensordot(Ginv[2], db, axes=([2], [0])))
-        da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
-                    np.dot(Ginv[3], da) +
-                    np.dot(Ginv[4], db))
-        db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
-                    np.dot(Ginv[4].T, da) +
-                    np.dot(Ginv[5], db))
+        if flag:
+            dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
+                        np.tensordot(Ginv[1], da, axes=([2], [0])) + 
+                        np.tensordot(Ginv[2], db, axes=([2], [0])))
+            da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
+                        np.dot(Ginv[3], da) +
+                        np.dot(Ginv[4], db))
+            db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
+                        np.dot(Ginv[4].T, da) +
+                        np.dot(Ginv[5], db))
+        natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight)
+        dW_ng, da_ng, db_ng = natgrad
         W += dW_ng
         a += da_ng
         b += db_ng
@@ -552,11 +579,74 @@ class BRBM(RBM):
         logZB_est_bounds = (logDiffExp(asarray([log(3)+logstd_AIS, r_AIS]))[0]+logZA,
                             logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         if mode == 'logZ':
-            return logZB, logZB_est_bounds
+            return logZB, logZB_est_bounds, (W,a,b)
         elif mode == 'preprocess':
             return (W,a,b), logZA, logw, vis
         else:
             return (hid, vis), logZB, logZB_est_bounds
+    @staticmethod
+    def compute_err_of(params, data):
+        W, a, b = params
+        err = 0
+        for d in data:
+            prob = sigmoid(d.dot(W.T)+a)
+            hid  = prob > rand(*prob.shape)
+            prob = sigmoid(hid.dot(W)+b)
+            err += -((d*log(prob)+(1-d)*log(1-prob)).sum(axis=1)).mean()
+        return err/len(data)
+
+def update_X(dfe, X, Dinv, weight):
+    dW_, da_, db_ = dfe
+    vnum = db_.shape[1]
+    hnum = da_.shape[1]
+    vhnum=vnum*hnum
+    nparams = vhnum+hnum+vnum
+    N = dW_.shape[0]
+    if weight is None:
+        weight = ones(N, dtype=float)
+        weight = weight[:, newaxis]
+    norm = weight.sum()
+    #
+    dWm_ = (dW_*weight).sum(axis=0)/norm
+    dam_ = (da_*weight).sum(axis=0)/norm
+    dbm_ = (db_*weight).sum(axis=0)/norm
+
+    X[:-1, :vhnum] = dW_
+    X[:-1, vhnum:vhnum+hnum] = da_
+    X[:-1, vhnum+hnum:] = db_
+    X[-1, :vhnum] = dWm_
+    X[-1, vhnum:vhnum+hnum] = dam_
+    X[-1, vhnum+hnum:] = dbm_
+    Dinv[arange(N)] = weight.flat/norm
+    Dinv[-1] = -1.
+    return X,Dinv
+
+def compute_NG(dparams, shape, X, Dinv, weight, flag=True):
+    dW, da, db = dparams
+    M,N = shape
+    dparams = zeros(M*N+M+N, dtype=float)
+    dparams[:M*N] = dW.flat
+    dparams[M*N:M*N+M] = da
+    dparams[M*N+M:] = db
+
+    #Gtmp = (X.T*Dinv).dot(X)
+    #compute inverse of (lI+G)
+    l = 1.
+    #I = eye(nparams, dtype=float)
+    #Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
+    #Ginv[arange(nparams), arange(nparams)] += 1/l 
+    if flag:
+        dparams_nat = dparams/l - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l).dot(X.dot(dparams)))/(l**2)
+    else:
+        dparams_nat = dparams
+    dmetric = dparams_nat.dot(dparams)
+
+    natgrad = (dparams_nat[:M*N].reshape(M,N),
+               dparams_nat[M*N:M*N+M],
+               dparams_nat[M*N+M:])
+    return natgrad, dmetric
+
+
 
 def approx_matrix_inv(A, V_0=None, niter=100):
     '''
@@ -588,9 +678,10 @@ def apply_metric(G, vec):
            np.dot(G[5], db))
     return dW_, da_, db_
 
-@static_var('Gtmp', None)
+
+@static_var('X', None)
 def fisher_inv(dfe, weight=None):
-    Gtmp=fisher_inv.Gtmp
+    X=fisher_inv.X
     dW_, da_, db_ = dfe
     vnum = db_.shape[1]
     hnum = da_.shape[1]
@@ -606,20 +697,19 @@ def fisher_inv(dfe, weight=None):
     dam_ = (da_*weight).sum(axis=0)/norm
     dbm_ = (db_*weight).sum(axis=0)/norm
 
-    X = zeros(N+1, nparams)
-    Dinv = zeros(N+1)
+    Dinv = zeros(N+1, dtype=float)
     X[:-1, :vhnum] = dW_
     X[:-1, vhnum:vhnum+hnum] = da_
     X[:-1, vhnum+hnum:] = db_
     X[-1, :vhnum] = dWm_
     X[-1, vhnum:vhnum+hnum] = dam_
     X[-1, vhnum+hnum:] = dbm_
-    Dinv[arange(N)] = weight.flat
+    Dinv[arange(N)] = weight.flat/norm
     Dinv[-1] = -1.
 
     Gtmp = (X.T*Dinv).dot(X)
     #compute inverse of (lI+G)
-    l = 0.01
+    l = 1.
     I = eye(nparams, dtype=float)
     Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
     Ginv[arange(nparams), arange(nparams)] += 1/l 
