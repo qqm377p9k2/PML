@@ -249,6 +249,16 @@ class BRBM(RBM):
         axis = len(v.shape)-1
         return -(v*b).sum(axis=axis) - ReL(dot(v,W.T)+ a).sum(axis=axis) 
 
+    def feh(self, h):
+        W, a, b = self.W, self.a, self.b
+        axis = len(h.shape)-1
+        return -(h*a).sum(axis=axis) - ReL(dot(h,W)+ b).sum(axis=axis) 
+
+    def computeZ(self):
+        assert(self.M < 30)
+        logZ = logSumExp(asarray([logSumExp(-self.feh(c)) for c in RBM.all_configs(self.M, LBS=12)]))
+        return logZ
+
     def exact_grad(self, data):
         assert(self.N < 30)
         LBS = 12
@@ -280,6 +290,40 @@ class BRBM(RBM):
         dbneg /= exp(logZ)
         return (dWpos, dapos, dbpos), (dWneg, daneg, dbneg), logZ
 
+    def compute_fisher(self):
+        ''''
+        computes fisher information of an RBM
+        '''
+        assert(self.N < 20)
+        LBS = 12
+        batchsz = 2**min(LBS, self.N)
+        W, a, b = self.W, self.a, self.b
+        #negative grad
+        dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
+        vhnum,vnum,hnum,paramnum = self.N * self.M, self.N, self.M, (self.N+1)*(self.M+1)-1
+        dfecov, dfemean = zeros((paramnum, paramnum)), zeros(paramnum)
+        logZ = zeros(max(2**(self.M-LBS), 1))
+        dfe_tmp = zeros((batchsz, paramnum))
+        def dfe(vis, dfe_tmp):
+            dW = -sigmoid(vis.dot(W.T)+a).reshape(batchsz, hnum, 1) * vis.reshape(batchsz, 1, vnum)
+            da = -sigmoid(vis.dot(W.T)+a)
+            db = -vis
+            dfe_tmp[:, :vhnum] = dW.reshape(batchsz, vhnum)
+            dfe_tmp[:, vhnum:vhnum+hnum] = da
+            dfe_tmp[:, vhnum+hnum:] = db
+        for i,c in enumerate(RBM.all_configs(self.N, LBS=LBS)):
+            unpv = exp(-self.fe(c)) #unnormalized p(h)
+            dfe(c, dfe_tmp)
+            dfecov += dot(dfe_tmp.T*unpv, dfe_tmp)
+            dfemean+= dot(unpv, dfe_tmp)
+            logZ[i] = logSumExp(-self.fe(c))
+        #logZ = logSumExp(asarray([logSumExp(-self.feh(c)) for c in RBM.all_configs(self.M, LBS=LBS)]))
+        logZ = logSumExp(logZ)
+        dfecov /= exp(logZ)
+        dfemean/= exp(logZ)
+        dfecov -= dfemean[:, newaxis]*dfemean
+        return dfecov, logZ
+
     def exact_natgrad(self, data):
         assert(self.N < 30)
         LBS = 12
@@ -297,28 +341,36 @@ class BRBM(RBM):
         dbpos /= data.shape[0]
         #negative grad
         dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
-        nparams = (self.N+1)*(self.M+1)-1
-        dfcov, dfmean = zeros((nparams, nparams)), zeros(nparams)
+        vhnum,vnum,hnum,paramnum = self.N * self.M, self.N, self.M, (self.N+1)*(self.M+1)-1
+        dfecov, dfemean = zeros((paramnum, paramnum)), zeros(paramnum)
+        logZ = zeros(max(2**(self.M-LBS), 1))
+        dfe_tmp = zeros((batchsz, paramnum))
         logZ = zeros(max(2**(self.N-LBS), 1))
-        for i,c in enumerate(RBM.all_configs(self.N, LBS=12)):
+        def dfe(vis, dfe_tmp):
+            dW = -sigmoid(vis.dot(W.T)+a).reshape(batchsz, hnum, 1) * vis.reshape(batchsz, 1, vnum)
+            da = -sigmoid(vis.dot(W.T)+a)
+            db = -vis
+            dfe_tmp[:, :vhnum] = dW.reshape(batchsz, vhnum)
+            dfe_tmp[:, vhnum:vhnum+hnum] = da
+            dfe_tmp[:, vhnum+hnum:] = db
+        for i,c in enumerate(RBM.all_configs(self.N, LBS=LBS)):
             eh = self.expectH(c)
             unpv = exp(-self.fe(c)) #unnormalized p(v)
             dWneg += dot(eh.T*unpv, c)
             daneg += (eh*unpv[:, newaxis]).sum(axis=0)
             dbneg += (c*unpv[:, newaxis]).sum(axis=0)
             logZ[i] = logSumExp(-self.fe(c))
-            df = npcat(((eh.reshape(eh.shape[0], eh.shape[1], 1)*c.reshape(c.shape[0], 1, c.shape[1])).reshape(c.shape[0], eh.shape[1]*c.shape[1]), eh, c), axis=1)
-            #df = npcat(([eh.T * c.T.reshape(c.shape[1],1,c.shape[0])].reshape(eh.shape[1]*c.shape[1],c.shape[0]), eh, c), axis=1)
-            dfcov += (df.T*unpv).dot(df)
-            dfmean+= (df.T*unpv).sum(axis=1)
+            dfe(c, dfe_tmp)
+            dfecov += dot(dfe_tmp.T*unpv, dfe_tmp)
+            dfemean+= dot(unpv, dfe_tmp)
         logZ = logSumExp(logZ)
         dWneg /= exp(logZ)
         daneg /= exp(logZ)
         dbneg /= exp(logZ)
-        dfcov /= exp(logZ)
-        dfmean/= exp(logZ)
+        dfecov /= exp(logZ)
+        dfemean/= exp(logZ)
         grad = npcat(((dWpos-dWneg).reshape(self.M*self.N),dapos-daneg, dbpos-dbneg), axis=0)
-        G = dfcov-dfmean[:, newaxis]*(dfmean)
+        G = dfecov-dfemean[:, newaxis]*(dfemean)
         u,l,v = np.linalg.svd(G)
         natgrad = (v.T/l).dot(u.T.dot(grad))
         #print natgrad.shape
@@ -328,18 +380,32 @@ class BRBM(RBM):
         natgrad[self.M*self.N+self.M:].reshape(self.N)
         return (dWpos, dapos, dbpos), (dWneg, daneg, dbneg), logZ, grad, natgrad
 
-    def AIS(self, betaseq, N=100, base_rbm=None, mode='logZ'):
-        if not(base_rbm):
-            base_rbm = BRBM(M=self.M, N=self.N)
-        bA = base_rbm.b
-        MA = base_rbm.shape[0]
+    def AIS(self, betaseq, N=100, base_params=None, mode='logZ', verbose=False, data=None):
+        if data is None:
+            print 'Collecting target samples...'
+            data = self.gen_train_samples(size=50,nbatches=1000)
+            print 'Done'
+        if not(base_params):
+            print 'Computing the initial parameters...'
+            pm = data.mean(axis=0)
+            pm[pm<0.01] = 0.01
+            base_params = log(pm) - log(1-pm)
+            print 'Done'
+
+        bA = base_params
+        MA = self.shape[0]
         WB, aB, bB = self.W, self.a, self.b
         logZA =MA*log(2) + ReL(bA).sum()
         prob = sigmoid(tile(bA, [N, 1]))
         vis = prob > rand(*prob.shape)
         logw = -(vis.dot(bA) + MA*log(2))
-        for beta in betaseq[1:-1]:
+        logw_ = zeros(logw.shape)
+        for i,beta in enumerate(betaseq[1:-1]):
+            if verbose and (i%100==0):
+                print 'i:%g'%i
+                print 'ESS:%g/%g'%(exp(2*logSumExp(logw_)-logSumExp(2*logw_)),N)
             logw += (1-beta)*vis.dot(bA) + beta*vis.dot(bB) + ReL(beta*(vis.dot(WB.T)+aB)).sum(axis=1)
+            logw_[:] = logw
             prob = sigmoid(beta*(vis.dot(WB.T)+aB))
             hid  = prob > rand(*prob.shape)
             prob = sigmoid((1-beta)*bA + beta*(hid.dot(WB)+bB))
@@ -349,12 +415,14 @@ class BRBM(RBM):
         r_AIS = logSumExp(logw) - log(N)
         logZB = r_AIS + logZA 
 
+        ESS = exp(2*logSumExp(logw)-logSumExp(2*logw))
+
         meanlogw = logw.mean()
         logstd_AIS = log(std(exp(logw-meanlogw))) + meanlogw -log(N)/2
         logZB_est_bounds = (logDiffExp(asarray([log(3)+logstd_AIS, r_AIS]))[0]+logZA,
                             logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         if mode == 'logZ':
-            return logZB, logZB_est_bounds
+            return logZB, logZB_est_bounds, ESS
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
@@ -470,14 +538,11 @@ class BRBM(RBM):
         norm  = weight.sum()
 
         #init fisher metric
-        flag = True
-        if flag:
-            fisher_inv_naive.Gtmp= zeros((paramnum, paramnum), dtype=float)
-            Ginv = fisher_inv_naive(dfe(visold), weight)
-        #
         X = zeros((N+1, paramnum), dtype=float)
         Dinv = zeros(N+1, dtype=float)
         X, Dinv= update_X(dfe(visold), X, Dinv, weight)
+
+        do_PCD = False
 
         if verbose:
             print 'Starting AIS runs...'
@@ -492,32 +557,16 @@ class BRBM(RBM):
                 ERR = BRBM.compute_err_of((W,a,b), data)
                 print 'ERR:%g'%ERR
                 #plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(1000)/50)),50)))
-                #plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/20)),20)))
-                #plt.draw()
+                plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/20)),20)))
+                plt.draw();plt.draw()
                 
             #param update by natural gradient
             dW = sigmoid(data[i%nbatches].dot(W.T)+a).T.dot(data[i%nbatches])/self.batchsz 
             dW-= (sigmoid(visold.dot(W.T)+a)*weight).T.dot(visold)/norm
             da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(visold.dot(W.T)+a)*weight).sum(axis=0)/norm
             db = data[i%nbatches].mean(axis=0) - (visold*weight).sum(axis=0)/norm
-            if flag:
-                print Ginv[1].shape
-                print da.shape
-                dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
-                            np.tensordot(Ginv[1], da, axes=([2], [0])) + 
-                            np.tensordot(Ginv[2], db, axes=([2], [0])))
-                da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
-                            np.dot(Ginv[3], da) +
-                            np.dot(Ginv[4], db))
-                db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
-                            np.dot(Ginv[4].T, da) +
-                            np.dot(Ginv[5], db))
-            flag2= False
-            natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight, flag2)
-            print dW_ng
+            natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight, do_PCD)
             dW_ng, da_ng, db_ng = natgrad
-            print dW_ng
-            return 0
             W += lr*dW_ng
             a += lr*da_ng
             b += lr*db_ng
@@ -526,7 +575,7 @@ class BRBM(RBM):
             #pos AIS weight update
             logw += vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1)
             weight= np.exp(logw)[:, newaxis]
-            if flag2:
+            if do_PCD:
                 weight = ones(logw.shape)[:, newaxis]
             norm  = weight.sum()
             visold = vis.copy()##
@@ -554,16 +603,6 @@ class BRBM(RBM):
         dW-= (sigmoid(vis.dot(W.T)+a)*weight).T.dot(vis)/norm
         da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(vis.dot(W.T)+a)*weight).sum(axis=0)/norm
         db = data[i%nbatches].mean(axis=0) - (vis*weight).sum(axis=0)/norm
-        if flag:
-            dW_ng = lr*(np.tensordot(Ginv[0], dW, axes=([2,3], [0,1])) + 
-                        np.tensordot(Ginv[1], da, axes=([2], [0])) + 
-                        np.tensordot(Ginv[2], db, axes=([2], [0])))
-            da_ng = lr*(np.tensordot(Ginv[1], dW, axes=([0,1], [0,1])) + 
-                        np.dot(Ginv[3], da) +
-                        np.dot(Ginv[4], db))
-            db_ng = lr*(np.tensordot(Ginv[2], dW, axes=([0,1], [0,1])) +
-                        np.dot(Ginv[4].T, da) +
-                        np.dot(Ginv[5], db))
         natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight)
         dW_ng, da_ng, db_ng = natgrad
         W += dW_ng
@@ -587,6 +626,8 @@ class BRBM(RBM):
             return (W,a,b), logZA, logw, vis
         else:
             return (hid, vis), logZB, logZB_est_bounds
+
+
     @staticmethod
     def compute_err_of(params, data):
         W, a, b = params
@@ -935,7 +976,7 @@ class GRBM(RBM):
         #negative grad
         dWneg, daneg, dbneg = zeros(W.shape), zeros(a.shape), zeros(b.shape)
         logZ = zeros(max(2**(self.M-LBS), 1))
-        for i,c in enumerate(RBM.all_configs(self.M, LBS=12)):
+        for i,c in enumerate(RBM.all_configs(self.M, LBS=LBS)):
             ev = self.expectV(c)
             unph = exp(-self.feh(c)) #unnormalized p(h)
             dWneg += dot(c.T*unph, ev/self.sigma)
@@ -969,7 +1010,7 @@ class GRBM(RBM):
         nparams = (self.N+1)*(self.M+1)-1
         dfcov, dfmean = zeros((nparams, nparams)), zeros(nparams)
         logZ = zeros(max(2**(self.M-LBS), 1))
-        for i,c in enumerate(RBM.all_configs(self.M, LBS=12)):
+        for i,c in enumerate(RBM.all_configs(self.M, LBS=LBS)):
             ev = self.expectV(c)
             unph = exp(-self.feh(c)) #unnormalized p(h)
             dWneg += dot(c.T*unph, ev/self.sigma)
