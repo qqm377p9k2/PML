@@ -508,13 +508,16 @@ class BRBM(RBM):
         #sample from pA
         prob = sigmoid(tile(bA, [N, 1]))
         vis = prob > rand(*prob.shape)
-        visold = prob > rand(*prob.shape)
+        #visold = prob > rand(*prob.shape)
+        prob = sigmoid(tile(bA, [self.batchsz, 1]))
+        vis_PCD = prob > rand(*prob.shape)
         #init AIS weights
         logw = -(vis.dot(bA) + MA*log(2))
         r_AIS = 0.0
 
         #init params
-        W = zeros(self.W.shape, dtype=float)
+        #W = zeros(self.W.shape, dtype=float)
+        W = 0.01*random.randn(*self.W.shape)
         a = zeros(self.a.shape, dtype=float)
         b = bA
 
@@ -540,7 +543,7 @@ class BRBM(RBM):
         #init fisher metric
         X = zeros((N+1, paramnum), dtype=float)
         Dinv = zeros(N+1, dtype=float)
-        X, Dinv= update_X(dfe(visold), X, Dinv, weight)
+        X, Dinv= update_X(dfe(vis), X, Dinv, weight)
 
         do_PCD = False
 
@@ -556,37 +559,45 @@ class BRBM(RBM):
                 print 'NLL:%g'%NLL
                 ERR = BRBM.compute_err_of((W,a,b), data)
                 print 'ERR:%g'%ERR
-                #plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(1000)/50)),50)))
-                plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/20)),20)))
+                plt.subplot(2,1,1)
+                plt.imshow(tile_raster_images(vis, (28,28), (int(ceil(float(N)/50)),50)), cmap=cm.gray)
+                plt.subplot(2,1,2)
+                plt.imshow(tile_raster_images(W, (28,28), (int(ceil(float(hnum)/50)),50)), cmap=cm.gray)
                 plt.draw();plt.draw()
                 
             #param update by natural gradient
             dW = sigmoid(data[i%nbatches].dot(W.T)+a).T.dot(data[i%nbatches])/self.batchsz 
-            dW-= (sigmoid(visold.dot(W.T)+a)*weight).T.dot(visold)/norm
-            da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(visold.dot(W.T)+a)*weight).sum(axis=0)/norm
-            db = data[i%nbatches].mean(axis=0) - (visold*weight).sum(axis=0)/norm
-            natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight, do_PCD)
-            dW_ng, da_ng, db_ng = natgrad
-            W += lr*dW_ng
-            a += lr*da_ng
-            b += lr*db_ng
-            sqdist_tmp += (lr**2)*dmetric
+            #dW-= (sigmoid(visold.dot(W.T)+a)*weight).T.dot(visold)/norm
+            dW-= sigmoid(vis_PCD.dot(W.T)+a).T.dot(vis_PCD)/self.batchsz 
+            da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - sigmoid(vis_PCD.dot(W.T)+a).mean(axis=0)
+            db = data[i%nbatches].mean(axis=0) - vis_PCD.mean(axis=0)
+            if not(do_PCD):
+                #print 'nat'
+                natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, do_PCD)
+                dW_ng, da_ng, db_ng = natgrad
+                W += lr*dW_ng
+                a += lr*da_ng
+                b += lr*db_ng
+                sqdist_tmp += (lr**2)*dmetric
+            else:
+                #print 'PCD'
+                W += lr*dW
+                a += lr*da
+                b += lr*db
 
             #pos AIS weight update
             logw += vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1)
             weight= np.exp(logw)[:, newaxis]
-            if do_PCD:
-                weight = ones(logw.shape)[:, newaxis]
-            norm  = weight.sum()
-            visold = vis.copy()##
+            #if do_PCD:
+            #    weight = ones(logw.shape)[:, newaxis]
+            #norm  = weight.sum()
+            #visold = vis.copy()##
 
             #update G
             if sqdist_tmp > threshold:
                 sqdist += sqdist_tmp
                 sqdist_tmp = 0.
-                X, Dinv= update_X(dfe(visold), X, Dinv, weight)
-                if flag:
-                    Ginv = fisher_inv_naive(dfe(visold), weight)
+                X, Dinv= update_X(dfe(vis), X, Dinv, weight)
 
             #sample
             prob = sigmoid(vis.dot(W.T)+a)
@@ -595,20 +606,35 @@ class BRBM(RBM):
             vis  = prob > rand(*prob.shape)
             #neg AIS weight update
             logw -= vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1)
+            #sample for PCD
+            prob = sigmoid(vis_PCD.dot(W.T)+a)
+            hid  = prob > rand(*prob.shape)
+            prob = sigmoid(hid.dot(W)+b)
+            vis_PCD  = prob > rand(*prob.shape)
 
         #param update by natural gradient
         i+=1
         lr=learning_rates[-1]
         dW = sigmoid(data[i%nbatches].dot(W.T)+a).T.dot(data[i%nbatches])/self.batchsz 
-        dW-= (sigmoid(vis.dot(W.T)+a)*weight).T.dot(vis)/norm
-        da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(vis.dot(W.T)+a)*weight).sum(axis=0)/norm
-        db = data[i%nbatches].mean(axis=0) - (vis*weight).sum(axis=0)/norm
-        natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, weight)
-        dW_ng, da_ng, db_ng = natgrad
-        W += dW_ng
-        a += da_ng
-        b += db_ng
-        sqdist_tmp += (dW_ng*dW).sum() + (da_ng*da).sum() + (db_ng*db).sum()
+        #dW-= (sigmoid(vis.dot(W.T)+a)*weight).T.dot(vis)/norm
+        dW-= sigmoid(vis_PCD.dot(W.T)+a).T.dot(vis_PCD)/self.batchsz 
+        #da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - (sigmoid(vis.dot(W.T)+a)*weight).sum(axis=0)/norm
+        #db = data[i%nbatches].mean(axis=0) - (vis*weight).sum(axis=0)/norm
+        da = sigmoid(data[i%nbatches].dot(W.T)+a).mean(axis=0) - sigmoid(vis_PCD.dot(W.T)+a).mean(axis=0)
+        db = data[i%nbatches].mean(axis=0) - vis_PCD.mean(axis=0)
+        if not(do_PCD):
+            #print 'nat'
+            natgrad, dmetric = compute_NG((dW, da, db), self.shape, X, Dinv, do_PCD)
+            dW_ng, da_ng, db_ng = natgrad
+            W += lr*dW_ng
+            a += lr*da_ng
+            b += lr*db_ng
+            sqdist_tmp += (lr**2)*dmetric
+        else:
+            #print 'PCD'
+            W += lr*dW
+            a += lr*da
+            b += lr*db
 
         #finalize AIS weights
         logw += vis.dot(b) + ReL(vis.dot(W.T)+a).sum(axis=1)
@@ -640,8 +666,39 @@ class BRBM(RBM):
         return err/len(data)
 
 def test_AIS_NG():
-    rbm = BRBM(M=2, N=2)
-    rbm.AIS_NG(0.01*ones(5), N=5)
+    rbm = BRBM(M=10, N=10)
+    rbm.W *= 10
+    rbm.AIS_NG(0.01*ones(1000), N=1000)
+
+
+def test_AIS_NG2():
+    import DBNs.rbm
+    from Basics.utils import pickle
+    plt.ion()
+    plt.figure()
+    #rbmdir= '../DBNs/CD25_20/rbm_lr0.06_dr1e-05'
+    rbmdir= '../DBNs/CD25_500/rbm_lr0.1_dr0_mom0'
+    rbm = DBNs.rbm.load_brbm(rbmdir)
+    data = DBNs.rbm.gen_train(rbmdir)
+    params, logZA, logw, vis = rbm.AIS_NG(lrseq([0.1, 0.05], [5000, 5000]), N=500, data=data, mode='preprocess')
+    pickle('foo.pkl.gz', (params, logZA, logw, vis))
+
+
+def test_AIS_NG3():
+    import DBNs.rbm
+    from Basics.utils import pickle, unpickle
+    plt.ion()
+    plt.figure()
+    #rbmdir= '../DBNs/CD25_20/rbm_lr0.06_dr1e-05'
+    rbmdir= '../DBNs/CD25_500/rbm_lr0.1_dr0_mom0'
+    rbm = DBNs.rbm.load_brbm(rbmdir)
+    #data = DBNs.rbm.gen_train(rbmdir)
+    data = unpickle('../data/mnist.pkl.gz')[0][0]
+    params, logZA, logw, vis = rbm.AIS_NG(lrseq([0.001, 0.0005, 0.000025], [20000, 10000, 10000]), N=500, data=data, mode='preprocess')
+    pickle('foo.pkl.gz', (params, logZA, logw, vis))
+
+def lrseq(lrs, nums):
+    return npcat([lr*ones(num) for lr,num in zip(lrs,nums)], axis=0)
 
 def update_X(dfe, X, Dinv, weight):
     dW_, da_, db_ = dfe
@@ -669,7 +726,7 @@ def update_X(dfe, X, Dinv, weight):
     Dinv[-1] = -1.
     return X,Dinv
 
-def compute_NG(dparams, shape, X, Dinv, weight, flag=True):
+def compute_NG(dparams, shape, X, Dinv, flag=True):
     dW, da, db = dparams
     M,N = shape
     dparams = zeros(M*N+M+N, dtype=float)
@@ -678,11 +735,11 @@ def compute_NG(dparams, shape, X, Dinv, weight, flag=True):
     dparams[M*N+M:] = db
 
     #compute inverse of (lI+G)
-    l = 1.
-    Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
-    Ginv[arange(M*N+M+N), arange(M*N+M+N)] += 1/l 
-    print 'Ginv'
-    print Ginv
+    l = 10.
+    #Ginv = - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l)).dot(X)/(l**2)
+    #Ginv[arange(M*N+M+N), arange(M*N+M+N)] += 1/l 
+    #print 'Ginv'
+    #print Ginv
     if flag:
         dparams_nat = dparams/l - X.T.dot(linalg.inv(diag(1/Dinv) + X.dot(X.T)/l).dot(X.dot(dparams)))/(l**2)
     else:
@@ -1503,7 +1560,40 @@ class GRBM(RBM):
         return mv, scale*(mvv - mv[:,newaxis].dot(mv[newaxis,:]))
 
 
-    def sample_geometric_avr_cov(self, beta, base_params=None, nbatches=100, T=1000):
+    def cov_opt(self, base_params=None, nbatches=100, T=5000, niter=20):
+        '''
+        A routine for optimal covariance matrix.
+        This function numerically approximates the optimal covariance matrix
+        for an initial distribition that minimizes the Hellinger
+        distance between the initial and target distributions. 
+        This routine relies on two approximation techniques: 
+        the fixed point method (Minka, 2006) and approximated 
+        geometric path (Salakhutdinov and Murray, 2008).        
+        '''
+        if base_params is None:
+            base_params = self.cov(1.1)
+        for i in xrange(niter):
+            v, x, h = self.sample_geometric_avr_cov(self, beta=0.5, base_params=base_params, nbatches=nbatches, T=T)
+            v = v[100:].reshape((T-100)*nbatches, self.N)
+            base_params = v.mean(axis=0), scale*cov(v.T)
+        return base_params
+
+    def measure_hellinger(self, params, nsamples):
+        '''
+        Compute an MCMC estimate of 
+        $\sqrt(Z^B)\left(\left\{\frac{H(p,q)}{2}\right\}^2-1\right)$
+        that is monotonic to the Hellinger distance $H(p,q)$
+        '''
+        mean, cov = params
+        covinv = linalg.inv(cov)
+        detcov = linalg.det(cov)
+        def logpdf_norm(x):
+            return - 0.5*(((x-mean).dot(covinv))*(x-mean)).sum(axis=1) - 0.5*self.N*log(2*np.pi) - 0.5*log(detcov)
+        x = random.multivariate_normal(mean, cov, nsamples)
+        tmp = (exp(-0.5*self.fe(x) - 0.5*logpdf_norm(x)))
+        return -tmp.mean(), tmp.std()
+
+    def sample_geometric_avr_cov(self, beta=0.5, base_params=None, nbatches=100, T=1000):
         if base_params is None:
             base_params = self.cov(1.1)
         mu, cov = base_params
