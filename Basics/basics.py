@@ -7,6 +7,11 @@ from numpy import linalg as LA
 import cPickle
 import gzip
 
+def ReL(x):
+    ans = log(1+exp(x))
+    ans[x>500] = x[x>500]
+    return ans
+
 def meshgrid2(*arrs):
     arrs = tuple(reversed(arrs))  #edit
     lens = map(len, arrs)
@@ -27,12 +32,6 @@ def meshgrid2(*arrs):
         ans.append(arr2)
 
     return tuple(ans)
-
-def static_var(varname, value):
-    def decorate(func):
-        setattr(func, varname, value)
-        return func
-    return decorate
 
 def sigmoid(x):
     return 1/(1+exp(-x))
@@ -97,14 +96,23 @@ def main():
     print(possible_configs(3))
 
 
-def pickle(filename, object):
-    with gzip.open(filename, 'wb') as f:
-        cPickle.dump(object, f)
-
-def unpickle(filename):
-    with gzip.open(filename, 'rb') as f:
-        return (cPickle.load(f))
-
+def approx_matrix_inv(A, V_0=None, niter=100):
+    '''
+    Approximate an inverse of a matrix A
+    by using an iterative method that is
+    invented by Li and Li (2010)
+    '''
+    if V_0 is None:
+        V_0 = 0.001*random.randn(*A.shape)
+    V = V_0.copy()
+    I = eye(A.shape[0], dtype=float)
+    for i in xrange(niter):
+        AV = A.dot(V)
+        #V = V.dot(3*I - AV.dot(3*I-AV))
+        V = V.dot(7*I + AV.dot(-21*I + AV.dot(35*I+AV.dot(-35*I + AV.dot(21*I+AV.dot(-7*I+AV))))))
+    return V
+        
 
 if __name__=='__main__':
     main()
+
