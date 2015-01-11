@@ -36,6 +36,9 @@ def meshgrid2(*arrs):
 def sigmoid(x):
     return 1/(1+exp(-x))
 
+def sigmoid2(x):
+    return 1/(1+exp(-2*x))
+
 def isVector(array, size=None):
     vectorp = array.ndim==1
     if size:
