@@ -36,7 +36,7 @@ class messages(object):
             print 'Done'
 
 class measuring_speed(messages):
-    def __init__(self, starting_message='Starting computation...', ending_message='Done in %g secs',
+    def __init__(self, starting_message='Starting computation...', ending_message='Done in',
                  unit='sec', verbose=True):
         super(measuring_speed, self).__init__(starting_message, verbose)
         self.ending_message = ending_message
@@ -55,7 +55,7 @@ class measuring_speed(messages):
         self.timer = time.time() - self.timer
         self.obuffer[0] = self.timer
         if self.verbose:
-            print self.ending_message%self.timer
+            print self.ending_message +  ('%g %ss'(self.timer/self.norm, self.unit))
     def __repr__(self):
         return 'Duration :%g [%ss]'%(self.timer/self.norm, self.unit)
     def float(self):
