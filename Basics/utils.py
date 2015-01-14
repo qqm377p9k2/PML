@@ -55,7 +55,7 @@ class measuring_speed(messages):
         self.timer = time.time() - self.timer
         self.obuffer[0] = self.timer
         if self.verbose:
-            print self.ending_message +  ('%g %ss'(self.timer/self.norm, self.unit))
+            print self.ending_message +  ('%g %ss'%(self.timer/self.norm, self.unit))
     def __repr__(self):
         return 'Duration :%g [%ss]'%(self.timer/self.norm, self.unit)
     def float(self):
