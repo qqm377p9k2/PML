@@ -24,23 +24,40 @@ def static_var(varname, value):
 def mesh(ranges, N=100.):
     return asarray([arange(min, max, (max-min)/N) for min, max in ranges])
 
-class measuring_speed(object):
-    def __init__(self, message=None, mode='verbose'):
-        self.verbose = (mode == 'verbose')
-        if message is None:
-            message = 'Starting computation...'
+class messages(object):
+    def __init__(self, message='Starting...', verbose=True):
+        self.verbose = verbose
         self.message = message
     def __enter__(self):
         if self.verbose:
             print self.message
+    def __exit__(self, type, value, traceback):    
+        if self.verbose:
+            print 'Done'
+
+class measuring_speed(messages):
+    def __init__(self, starting_message='Starting computation...', ending_message='Done in %g secs',
+                 unit='sec', verbose=True):
+        super(measuring_speed, self).__init__(starting_message, verbose)
+        self.ending_message = ending_message
+        self.obuffer = zeros(1)
+        self.norm = 1.0
+        self.unit = unit
+        if unit == 'min':
+            self.norm = 60.0
+        elif unit == 'hour':
+            self.norm = 60.0**2
+    def __enter__(self):
+        super(measuring_speed, self).__enter__()
         self.timer = time.time()
-        return self
+        return self.obuffer
     def __exit__(self, type, value, traceback):
         self.timer = time.time() - self.timer
+        self.obuffer[0] = self.timer
         if self.verbose:
-            print 'Done in %g secs'%self.timer
+            print self.ending_message%self.timer
     def __repr__(self):
-        return 'Duration :%g [sec]'%self.timer
+        return 'Duration :%g [%ss]'%(self.timer/self.norm, self.unit)
     def float(self):
         return self.timer
 
