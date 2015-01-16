@@ -6,8 +6,9 @@ import matplotlib.cm as cm
 from numpy.random import randn, rand, permutation
 from numpy import linalg as LA
 
-from Basics.utils import measuring_speed, static_var
+from Basics.utils import measuring_speed, static_var, mesh
 
+import DBNs.rbm
 from DBNs.img_utils import tile_raster_images
 import cPickle, gzip
 
@@ -17,6 +18,10 @@ from Basics.basics import binary_expression, logSumExp, logDiffExp, sigmoid
 from variedParam import *
 from Data import *
 import MNIST
+
+
+def genparam(init_value, nepochs):
+    return init_value*ones(nepochs)
 
 def emptyMonitor(rbm, data):
     pass
@@ -60,15 +65,20 @@ class RBM(object):
         self.particles = None
         self.CDN = CDN
         self.sparsity = {'strength': 0., 'target': 0.}
-        #learning rates
-        self.lrate = variedParam(init_lr)
-        self.drate = variedParam(1.0)
-        self.mom   = variedParam(0.0, [['switchToAValueAt', 5, 0.9]])
+        #self.init_learning_schedules()
+
+    def init_learning_schedules(self, nepochs, init_lr=0.005, L2=(0.0, 0.0, 0.0), mom=0.0):
+        self.lrate = genparam(init_lr, nepochs)
+        self.L2 = zeros((nepochs, len(L2)))
+        for i in xrange(len(L2)):
+            self.L2[:,i] = L2[i]
+        #self.drate = genparam(1.0-L2, nepochs)
+        self.mom   = genparam(mom, nepochs)
 
     def lrates(self):
-        return (self.lrate.value(self.epoch), 
-                self.mom.value(self.epoch),
-                self.drate.value(self.epoch))
+        return (self.lrate[self.epoch-1], 
+                self.mom[self.epoch-1],
+                tuple(self.L2[self.epoch-1]))
 
     def initWithData(self, data):
         pass
@@ -94,13 +104,17 @@ class RBM(object):
     #training
     def train(self, data, epochs,
               monitor=emptyMonitor, logger=emptyLogger):
-        assert(data.training.data.shape[1]==self.shape[1])
+        if type(data) == tuple:
+            training_data = data[0][0]
+        else:
+            training_data = data
+        assert(training_data.shape[1]==self.shape[1])
         assert(self.algorithm != None)
         logger(mode='init', rbm=self, epochs=epochs, data=data)
         for epc in xrange(1,1+epochs):
             self.epoch = epc
             print('epoch:' + repr(epc))
-            self.sweepAcrossData(self.processDat(data.training.data))
+            self.sweepAcrossData(self.processDat(training_data))
             monitor(self, data)
             logger(mode='logging', rbm=self)
         return self
@@ -111,23 +125,17 @@ class RBM(object):
             samples = self.sampleV(self.sampleH(samples)[0])[0]
         return samples
 
-    def sample(self, v0, T=100, nbatches=100):
-        v = zeros((T, nbatches, self.shape[1]))
-        h = zeros((T, nbatches, self.shape[0]))
+    def sample(self, v0, N=100, nbatches=100, interactive=False, **kwargs):
+        v = zeros((N, nbatches, self.shape[1]))
+        h = zeros((N, nbatches, self.shape[0]))
         v[0] = v0
-        for i in xrange(1,T):
+        for i in xrange(1,N):
             h[i] = self.sampleH(v[i-1])[0]
             v[i] = self.sampleV(h[i])[0]
+        if nbatches==1 and interactive:
+            h = h.reshape(N, self.shape[0])
+            v = v.reshape(N, self.shape[1])
         return v, h
-
-    def sample_old(self, N=100):
-        samples = zeros((N, self.shape[1]))
-        samples[0] = rand(1, self.shape[1])>0.5
-        hsamples=zeros((N, self.shape[0]))
-        for i in xrange(1,N):
-            hsamples[i] = self.sampleH(samples[i-1][newaxis, :])[0]
-            samples[i] = self.sampleV(hsamples[i][newaxis, :])[0]
-        return samples, hsamples
 
     def set_n(self, n):
         u,s,v = LA.svd(asarray(self.W, dtype='>d'))
@@ -143,7 +151,39 @@ class RBM(object):
         plt.imshow(image)
         plt.show()
 
+    def error(self, data):
+        'cross-entropy reconstruction error'
+        err = 0.
+        c = 0
+        for v in data:
+            c+=1
+            ev = self.expectV(self.sampleH(v)[0])
+            entropy = -(v*np.log(ev) + (1-v)*np.log(1-ev))
+            entropy[np.isnan(entropy)] = 0.
+            err += entropy.mean()
+        err /= c
+        return err
 
+    def show_samples(self, N=2000, draw=True, 
+                     burnin=False, ncols=50, nruns=1,
+                     **kwargs):
+        if burnin:
+            v, h = self.sample(N=burnin, nbatches=nruns, v0=self.particles, **kwargs)
+            v0 = v[-1]
+        else:
+            v0 = None
+        v, h = self.sample(N=N/nruns, nbatches=nruns, v0=v0, **kwargs)
+        if nruns != 1:
+            v = v.reshape(N, self.N)
+        image = tile_raster_images(v, (28,28), (int(np.ceil(float(len(v))/ncols)),ncols))
+        plt.imshow(image, cmap=cm.gray)
+        if draw:
+            plt.show()
+    def init_particles(self, batchsz=100):
+        self.particles = -ones((int(batchsz), self.N))
+        v,h = self.sample(N=100, nbatches=batchsz, v0=self.particles)
+        self.particles = v[-1]
+    
     @staticmethod
     def all_configs(N, LBS=15):
         if N > LBS:
@@ -217,7 +257,8 @@ class BRBM(RBM):
     def sweepAcrossData(self,data):
         strength, target = self.sparsity.values()
         batchsz = float(self.batchsz)
-        lrate, mom, drate = self.lrates()
+        lrate, mom, L2 = self.lrates()
+        L2W, L2a, L2b = L2
         particles = self.particles
         #main part of the training
         for item in data: ##sampled data vectors
@@ -238,9 +279,9 @@ class BRBM(RBM):
             self.vW = mom*self.vW + lrate*dW
             self.va = mom*self.va + lrate*da
             self.vb = mom*self.vb + lrate*db
-            self.W = drate*self.W + self.vW
-            self.a = drate*self.a + self.va
-            self.b = drate*self.b + self.vb
+            self.W = (1-L2W)*self.W + self.vW
+            self.a = (1-L2a)*self.a + self.va
+            self.b = (1-L2b)*self.b + self.vb
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
 
@@ -426,10 +467,11 @@ class BRBM(RBM):
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
-    def sample(self, T=100, nbatches=100, v0=None):
+
+    def sample(self, N=100, nbatches=100, th=5., v0=None):
         if v0 is None:
-            v0 = random.rand(nbatches, self.shape[1])>0.5
-        return super(BRBM, self).sample(T=T,nbatches=nbatches, v0=v0)
+            v0 = np.sign(random.rand(nbatches, self.shape[1])-th)
+        return super(BRBM, self).sample(N=N,nbatches=nbatches, v0=v0)
 
 
     def gen_train_samples(self, size=100, freq=100, burnin=100, nbatches=100):
@@ -653,6 +695,10 @@ class BRBM(RBM):
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
+    def show_filters(self):
+        image = tile_raster_images(self.W, (28,28), (int(ceil(float(self.M)/50)),50))
+        plt.imshow(image, cmap=cm.gray)
+        plt.show()
 
     @staticmethod
     def compute_err_of(params, data):
@@ -826,8 +872,8 @@ def ReL(x):
     ans[x>500] = x[x>500]
     return ans
 
-def betaseq(separators, counts):
-    assert(separators[0]==0.0 and separators[-1]==1.0)
+def betaseq(separators, counts, end_point=1.0):
+    assert(separators[0]==0.0 and separators[-1]==end_point)
     assert(all(diff(separators)>0))
     import functools as ft
     import operator as op
@@ -953,8 +999,6 @@ def annealedGM(x, ratio, mu, base_param, beta):
 
 def ranges(vecs):
     return asarray((vecs.min(axis=1), vecs.max(axis=1))).T
-def mesh(ranges, N=100.):
-    return asarray([arange(min, max, (max-min)/N) for min, max in ranges])
 
 class GRBM(RBM):
     """Gaussian RBMs"""
@@ -988,7 +1032,8 @@ class GRBM(RBM):
     def sweepAcrossData(self,data):
         strength, target = self.sparsity.values()
         batchsz = float(self.batchsz)
-        lrate, mom, drate = self.lrates()
+        lrate, mom, L2 = self.lrates()
+        L2W, L2a, L2b = L2
         particles = self.particles
         #main part of the training
         for item in data: ##sampled data vectors
@@ -1009,9 +1054,9 @@ class GRBM(RBM):
             self.vW = mom*self.vW + lrate*dW
             self.va = mom*self.va + lrate*da
             self.vb = mom*self.vb + lrate*db
-            self.W = drate*self.W + self.vW
-            self.a = drate*self.a + self.va
-            self.b = drate*self.b + self.vb
+            self.W = (1-L2W)*self.W + self.vW
+            self.a = (1-L2a)*self.a + self.va
+            self.b = (1-L2b)*self.b + self.vb
         self.particles = particles
         print(sqrt(sum(self.W*self.W)))
 
@@ -1132,6 +1177,7 @@ class GRBM(RBM):
         if pause_points==None:
             pause_points = (len(betaseq)-3)*ones(12)
             pause_points[:-1] = arange(0, len(betaseq), int(len(betaseq)/10.))
+        print base_params
         pause_points = asarray(pause_points, dtype=int)
         print zip(betaseq[pause_points], pause_points)
         M = self.M
@@ -1189,7 +1235,7 @@ class GRBM(RBM):
             return (hid, vis), logZB, logZB_est_bounds
 
 
-    def AIS_cov(self, betaseq, base_params=None, N=100, mode='logZ'):
+    def AIS_cov(self, betaseq, base_params=None, N=100, mode='logZ', expand=False):
         if base_params is None:
             base_params = self.cov(1.1)
         M = self.M
@@ -1198,9 +1244,13 @@ class GRBM(RBM):
         #coveig = linalg.eigh(cov)
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
         LA = linalg.inv(cov-np.diag(sB**2))
-        LAeig = linalg.eigh(LA)[0]
+        LAeig,LA_U = linalg.eigh(LA)
+        if expand == False:
+            assert((LAeig>0).all())
+        else:
+            LAeig[(LAeig<expand)] = expand
+            LA = (LA_U*LAeig).dot(LA_U.T)
         print LAeig
-        assert((LAeig>0).all())
 
         covxv = linalg.inv(diag(1/sB**2)+LA)
 
@@ -1233,25 +1283,32 @@ class GRBM(RBM):
                             logSumExp( asarray([log(3)+logstd_AIS, r_AIS]))   +logZA)
         if mode == 'logZ':
             return logZB, logZB_est_bounds, ESS
+        elif mode == 'samples':
+            return vis, np.exp(logw-logSumExp(logw)), logZB, logZB_est_bounds, ESS
         else:
             return (hid, vis), logZB, logZB_est_bounds
 
 
-    def AIS_cov_debug(self, betaseq, base_params=None, N=100, mode='logZ', pause_points=None, ext=([-10,10],[-10,10]), save=None):
+    def AIS_cov_debug(self, betaseq, base_params=None, N=100, mode='logZ', pause_points=None, ext=([-10,10],[-10,10]), save=None, expand=False):
         if base_params is None:
             base_params = self.cov(1.1)
         if pause_points==None:
             pause_points = (len(betaseq)-3)*ones(12)
             pause_points[:-1] = arange(0, len(betaseq), int(len(betaseq)/10.))
+        print base_params
         M = self.M
         mu, cov = base_params
         covinv = linalg.inv(cov)
         #coveig = linalg.eigh(cov)
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
         LA = linalg.inv(cov-np.diag(sB**2))
-        LAeig = linalg.eigh(LA)[0]
+        LAeig,LA_U = linalg.eigh(LA)
+        if expand == False:
+            assert((LAeig>0).all())
+        else:
+            LAeig[(LAeig<expand)] = expand
+            LA = (LA_U*LAeig).dot(LA_U.T)
         print LAeig
-        assert((LAeig>0).all())
 
         covxv = linalg.inv(diag(1/sB**2)+LA)
 
@@ -1545,8 +1602,8 @@ class GRBM(RBM):
         v = v[100:].reshape((N-100)*nbatches, visnum)
         return v.mean(axis=0), scale*cov(v.T)
 
-    def cov2(self, scale=1.05, nbatches=100, T=5000, tbatches=100, radius=5.):
-        v, h = self.sample(N=100, nbatches=nbatches, radius=radius)
+    def cov2(self, scale=1.05, nbatches=100, T=5000, tbatches=100, radius=5., burn_in_len=100):
+        v, h = self.sample(N=burn_in_len, nbatches=nbatches, radius=radius)
         visnum = self.N
         mvv = zeros((visnum, visnum))
         mv  = zeros(visnum)
@@ -1557,10 +1614,46 @@ class GRBM(RBM):
             mv  += tmp.sum(axis=0)
         mv  /= (T*nbatches-1)
         mvv /= (T*nbatches-1)
-        return mv, scale*(mvv - mv[:,newaxis].dot(mv[newaxis,:]))
+        return mv, scale*(mvv - mv[:,newaxis]*mv)
 
 
-    def cov_opt(self, base_params=None, nbatches=100, T=5000, niter=20):
+    def cov_opt2(self, base_params=None, nbatches=100, 
+                N=5000, niter=20, verbose=True, debug=False, expand=False):
+        if base_params is None:
+            if verbose:
+                print 'Computing the initial params...', 
+            base_params = self.cov2(scale=1.0, T=9000, nbatches=1000, burn_in_len=1000)
+            if verbose:
+                print ' Done'
+        for i in xrange(niter):
+            if verbose:
+                print 'pre-execution of AIS#%g'%i
+            v, weight, logZB, logZB_est_bounds, ESS= self.AIS_cov(betaseq([0, 0.1, 0.25, 0.5], [500, 500, 500], end_point=0.5),
+                                                                  base_params=base_params,
+                                                                  N=N, expand=expand, mode='samples')
+            mv = weight.dot(v)
+            base_params_ = mv, (v.T*weight).dot(v) - mv[:, newaxis]*mv
+            if debug:
+                print 'ESS%g'%ESS, 
+                print 'diff:%g '%np.sqrt(np.sum((base_params[1]-base_params_[1])**2))
+            base_params = base_params_
+        return base_params
+
+    def AIS_cov_opt(self, betaseq, MCMCparams = (1.0, 10000, 1000, 5), N=5000, mode='logZ', expand=False):
+        scale, nchains, burn_in_len, niter = MCMCparams
+        base_params = rbm.cov_opt(base_params=None, nbatches=nbatches, T=nchains,
+                                  niter=niter, burn_in_len=burn_in_len, debug=True,
+                                  scale=scale, init_mode='uniform', expand=expand)
+        logZB, logZB_est_bounds, ESS = rbm.AIS_cov(betaseq, base_params = base_params, N=N, expand=expand, mode=mode)
+        return logZB, logZB_est_bounds, ESS
+
+
+    def cov_opt(self, base_params=None, nbatches=100, 
+                T=5000, niter=20, scale = 1.1, burn_in_len=100, 
+                verbose=True, debug=False, expand=False,
+                init_mode='base_params', 
+                monitor_nsamples=100000, 
+                conservative=False):
         '''
         A routine for optimal covariance matrix.
         This function numerically approximates the optimal covariance matrix
@@ -1570,12 +1663,40 @@ class GRBM(RBM):
         the fixed point method (Minka, 2006) and approximated 
         geometric path (Salakhutdinov and Murray, 2008).        
         '''
+        best_tildeH = np.inf
         if base_params is None:
-            base_params = self.cov(1.1)
+            if verbose:
+                print 'Computing the initial params...', 
+            base_params = self.cov2(scale, nbatches=nbatches, burn_in_len=burn_in_len)
+            #base_params = base_params[0], np.diag(np.diag(base_params[1]))
+            if verbose:
+                print ' Done'
+        if debug:
+            tildeH, stdTildeH = self.measure_hellinger(base_params, monitor_nsamples)
+            tildeH_err = (stdTildeH/np.sqrt(monitor_nsamples))
+            print '\\tilde{H}: %g'%tildeH,
+            print ' (%g)'%tildeH_err
         for i in xrange(niter):
-            v, x, h = self.sample_geometric_avr_cov(self, beta=0.5, base_params=base_params, nbatches=nbatches, T=T)
-            v = v[100:].reshape((T-100)*nbatches, self.N)
-            base_params = v.mean(axis=0), scale*cov(v.T)
+            #v, x, h = self.sample_geometric_avr_cov_obs(beta=0.5, base_params=base_params, nbatches=nbatches, T=T, expand=expand)
+            #v = v[burn_in_len:].reshape((T-burn_in_len)*nbatches, self.N)
+            #base_params_ = v.mean(axis=0), scale*cov(v.T)
+            base_params_ = self.sample_geometric_avr_cov(beta=0.5, base_params=base_params, nbatches=nbatches, T=T, scale=scale, init_mode=init_mode, burn_in_len=burn_in_len, expand=expand, debug=debug)
+            if debug:
+                #coveig = linalg.eigh(base_params[1])[0]
+                #print coveig.min(), coveig.max()
+                print 'diff:%g '%np.sqrt(np.sum((base_params[1]-base_params_[1])**2)),
+            if debug:
+                tildeH, stdTildeH = self.measure_hellinger(base_params, monitor_nsamples)
+                tildeH_err = (stdTildeH/np.sqrt(monitor_nsamples))
+                print '\\tilde{H}: %g'%tildeH,
+                print ' (%g)'%tildeH_err
+                if (tildeH > best_tildeH) and (tildeH_err/abs(tildeH) <0.1) and conservative:
+                    print "\tParemeters haven't been updated"
+                else:
+                    best_tildeH = tildeH
+                    base_params = base_params_
+
+                    
         return base_params
 
     def measure_hellinger(self, params, nsamples):
@@ -1593,17 +1714,24 @@ class GRBM(RBM):
         tmp = (exp(-0.5*self.fe(x) - 0.5*logpdf_norm(x)))
         return -tmp.mean(), tmp.std()
 
-    def sample_geometric_avr_cov(self, beta=0.5, base_params=None, nbatches=100, T=1000):
+    def sample_geometric_avr_cov_obs(self, beta=0.5, base_params=None, nbatches=100, T=1000, scale=1.1, expand=False, debug=False):
+        'simple but fool routine'
         if base_params is None:
-            base_params = self.cov(1.1)
+            base_params = self.cov(scale)
         mu, cov = base_params
         covinv = linalg.inv(cov)
         #coveig = linalg.eigh(cov)
         WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
         LA = linalg.inv(cov-np.diag(sB**2))
-        LAeig = linalg.eigh(LA)[0]
-        print LAeig
-        assert((LAeig>0).all())
+        #
+        LAeig,LA_U = linalg.eigh(LA)
+        if expand == False:
+            assert((LAeig>0).all())
+        else:
+            LAeig[(LAeig<expand)] = expand
+            LA = (LA_U*LAeig).dot(LA_U.T)
+        if debug:
+            print LAeig.min(), LAeig.max()
 
         covxv = linalg.inv(diag(1/sB**2)+LA)
 
@@ -1623,6 +1751,106 @@ class GRBM(RBM):
 
         return v,x,h
 
+
+    def sample_geometric_avr_cov(self, beta=0.5, base_params=None, nbatches=100, tbatches=100, T=1000, burn_in_len=100, 
+                                 scale=1.1, init_mode='base_params', expand=False, debug=False):
+        if base_params is None:
+            base_params = self.cov(scale=1.)
+        mu, cov = base_params
+        covinv = linalg.inv(cov)
+        #coveig = linalg.eigh(cov)
+        WB, aB, bB, sB = self.W, self.a, self.b, self.sigma
+        LA = linalg.inv(cov-np.diag(sB**2))
+        #
+        LAeig,LA_U = linalg.eigh(LA)
+        if expand == False:
+            assert((LAeig>0).all())
+        else:
+            LAeig[(LAeig<expand)] = expand
+            LA = (LA_U*LAeig).dot(LA_U.T)
+        if debug:
+            print LAeig.min(), LAeig.max()
+
+        covxv = linalg.inv(diag(1/sB**2)+LA)
+
+        #v = zeros((T, nbatches, self.N))
+        if init_mode == 'base_params':
+            v = random.multivariate_normal(mu, scale*cov, nbatches)
+        elif init_mode == 'uniform':
+            v = scale*random.randn(nbatches, self.N)
+        #burn-in
+        for i in xrange(burn_in_len):
+            prob = sigmoid(beta*((v/sB).dot(WB.T)+aB))
+            h  = prob > rand(*prob.shape)
+            prob = (v/sB**2+mu.dot(LA)).dot(covxv)
+            x = random.multivariate_normal(zeros(self.N), covxv/(1-beta), nbatches) + prob
+            prob = (beta*(h.dot(sB*WB)+bB) + (1-beta)*x)
+            v = randn(*prob.shape)*sB + prob
+        #main part of sampling
+        mv, mvv = zeros(self.N), zeros((self.N, self.N))
+        for _ in xrange((T-burn_in_len)/tbatches):
+            tmp = zeros((tbatches, nbatches, self.N))
+            for i in xrange(tbatches):
+                prob = sigmoid(beta*((v/sB).dot(WB.T)+aB))
+                h  = prob > rand(*prob.shape)
+                prob = (v/sB**2+mu.dot(LA)).dot(covxv)
+                x = random.multivariate_normal(zeros(self.N), covxv/(1-beta), nbatches) + prob
+                prob = (beta*(h.dot(sB*WB)+bB) + (1-beta)*x)
+                v = randn(*prob.shape)*sB + prob
+                tmp[i] = v
+            tmp = tmp.reshape((tbatches*nbatches, self.N))
+            mvv += (tmp.T).dot(tmp)
+            mv  += tmp.sum(axis=0)
+        mv  /= nbatches*(T-burn_in_len)
+        mvv /= nbatches*(T-burn_in_len)
+        return mv, mvv-mv[:, newaxis]*mv
+
+
+def test_AIS_cov(dist=5, method='AIS_cov', debug=True, rbm_dir=None, expand=1.0, qk = 250):
+    'for NIPS DLWS 14'
+    if rbm_dir:
+        rbm = load_RBM_mat(rbm_dir, data=False)
+    else:
+        rbm = make_test_GRBM(dist=dist)
+    if rbm_dir:
+        betaseq_ = betaseq([0, 0.1, 0.25, 0.5, 1], [qk, qk, qk, qk])
+        base_params = rbm.cov2(scale=1.0, T=9000, nbatches=1000, burn_in_len=1000)
+        if method == 'AIS':
+            logZB, logZB_est_bounds, ESS = getattr(rbm, method)(betaseq_, base_params=base_params, N=5000)
+        else:
+            logZB, logZB_est_bounds, ESS = getattr(rbm, method)(betaseq_, base_params=base_params, N=5000, expand=expand)
+    else:
+        method += '_debug'
+        logZB, logZB_est_bounds, ESS, r_AIS = getattr(rbm, method)(betaseq([0, 0.1, 0.25, 0.5, 1], asarray([25,25, 25, 25])), N=100, ext=[[-8,8],[-8,8]], pause_points=[0, 50, 70, 98])
+    print logZB, logZB_est_bounds, ESS
+
+def test_cov_opt(dist=5, rbm_dir=None, scale=1.1, expand=1.0, method='cov_opt', qk = 250, niter=5, 
+                 nbatches=1000, init_mode='base_params', T=10000, burn_in_len=1000):
+    'for ICLR15'
+    #if expand is not False:
+    #    scale=1.0
+    if rbm_dir:
+        rbm = load_RBM_mat(rbm_dir, data=False)
+    else:
+        rbm = make_test_GRBM(dist=dist)
+    if method == 'cov_opt':
+        #base_params = rbm.cov_opt(base_params=None, nbatches=200, T=5000, niter=10, burn_in_len=100, debug=True, expand=expand)
+        base_params = rbm.cov_opt(base_params=None, nbatches=nbatches, niter=niter, T=T, burn_in_len=burn_in_len, debug=True, scale=scale, init_mode=init_mode, expand=expand)
+    elif method == 'cov_opt2':
+        base_params = rbm.cov_opt2(base_params=None, N=5000, niter=5, debug=True, expand=expand)
+    #base_params = base_params[0], scale*base_params[1]##NOTE: scaled cov
+    if rbm_dir:
+        betaseq_ = betaseq([0, 0.1, 0.25, 0.5, 1], [qk, qk, qk, qk])
+        logZB, logZB_est_bounds, ESS = rbm.AIS_cov(betaseq_, base_params = base_params, N=5000, expand=expand)
+    else:
+        logZB, logZB_est_bounds, ESS, r_AIS = rbm.AIS_cov_debug(betaseq([0, 0.1, 0.25, 0.5, 1], asarray([25,25, 25, 25])), 
+                                                                base_params = base_params, 
+                                                                N=100, ext=[[-8,8],[-8,8]], pause_points=[0, 50, 70, 98])
+    print logZB, logZB_est_bounds, ESS
+
+
+def foo():
+    rbm = RBM.load_RBM_mat(name, data=False)
 
 @static_var('Gtmp', None)
 def fisher_inv_GRBM(dfe, weight=None):
@@ -1708,6 +1936,78 @@ def fisher_inv_GRBM(dfe, weight=None):
             Gtmp[vhnum+hnum+vnum:, vhnum+hnum+vnum:])
     return Ginv, G
 
+class IGRBM(RBM):
+    """
+    Inversed Gaussian RBMs
+    RBMs with Gaussian hidden and Binary visible units
+    """
+    def __init__(self, M, N, batchsz=100):
+        super(IGRBM, self).__init__(M=M,N=N,batchsz=batchsz)
+        self.sigma = ones(self.shape[0],dtype=float)
+        self.vs = zeros(self.sigma.shape, dtype=float)
+        self.sigrange = (0.01, 5.)
+
+    def initWithData(self, data):
+        super(IGRBM, self).initWithData(data)
+
+    def expectH(self, V):
+        assert(V.shape[1]==self.shape[1])
+        return self.sigma*(V.dot(self.W.T))+ self.a
+    def sampleH(self, V):
+        eh = self.expectH(V)
+        return (randn(*eh.shape)*self.sigma+eh, eh)
+
+    def expectV(self, H):
+        assert(H.shape[1]==self.shape[0])
+        return sigmoid((H/self.sigma).dot(self.W)+ self.b)
+    def sampleV(self, H):
+        ev = self.expectV(H)
+        return (ev > rand(*ev.shape), ev)
+
+    def fh(self, h):
+        W, a, b, s = self.W, self.a, self.b, self.sigma
+        axis = len(v.shape)-1
+        return 0.5*(((h-a)/s)**2).sum(axis=axis) - log(1+exp(dot(h/s,W.T)+ b)).sum(axis=axis) 
+    def fv(self, v):
+        W, a, b, s = self.W, self.a, self.b, self.sigma
+        return 0.5*((a/s)**2).sum() -0.5*self.M*log(2*np.pi) -log(s).sum() -h.dot(b) - 0.5*(((a+s*v.dot(W.T))/s)**2).sum(axis=1)
+
+    def sweepAcrossData(self,data):
+        strength, target = self.sparsity.values()
+        batchsz = float(self.batchsz)
+        lrate, mom, L2 = self.lrates()
+        L2W, L2a, L2b, L2s = L2
+        particles = self.particles
+        #main part of the training
+        for item in data: ##sampled data vectors
+            eh = self.expectH(item)          #expected H vectors
+            dW = (eh/self.sigma).T.dot(item)/batchsz
+            da = mean((eh-self.a)/(self.sigma**2),axis=0)
+            db = mean(item,axis=0)
+            ds = ((eh-self.a)**2).mean(axis=0)/(self.sigma**3)
+            #sparsity
+            #da += strength*(target-da) 
+            if self.algorithm == 'CD':
+                particles = item
+            for cdCount in xrange(self.CDN):
+                particles, ev = self.sampleV(self.sampleH(particles)[0])
+            eh = self.expectH(particles)
+            dW -= (eh/self.sigma).T.dot(particles)/batchsz
+            da -= mean((eh-self.a)/(self.sigma**2),axis=0)
+            db -= mean(ev,axis=0)
+            ds -= ((eh-self.a)**2).mean(axis=0)/(self.sigma**3)
+            self.vW = mom*self.vW + lrate*dW
+            self.va = mom*self.va + lrate*da
+            self.vb = mom*self.vb + lrate*db
+            self.vs = mom*self.vs + lrate*ds
+            self.W = (1-L2W)*self.W + self.vW
+            self.a = (1-L2a)*self.a + self.va
+            self.b = (1-L2b)*self.b + self.vb
+            self.sigma = (1-L2s)*self.sigma + self.vs
+            self.sigma[self.sigma<self.sigrange[0]] = self.sigrange[0]
+            self.sigma[self.sigma>self.sigrange[1]] = self.sigrange[1]
+        self.particles = particles
+
 def base_GRBM_for(data, batchsz=100, debug=False):
     N = data.shape[1]
     rbm = BRBM(M=1, N=N)
@@ -1766,8 +2066,8 @@ def monitor(rbm, data):
         for j in xrange(10):
             img[i*28:(i+1)*28, j*28:(j+1)*28] = rbm.W[:100].reshape((10,10,28,28))[i,j]
     plt.subplot(2,1,1)
-    plt.imshow(img, animated=True)
-    print sort(LA.svd(rbm.W)[1])
+    plt.imshow(img, animated=True, cmap=cm.gray)
+    #print sort(LA.svd(rbm.W)[1])
     N, M = rbm.shape
     W = concatenate((concatenate((zeros((N,N)), rbm.W), axis=1), 
                      concatenate((rbm.W.T     , zeros((M,M))), axis=1)))
@@ -1775,8 +2075,7 @@ def monitor(rbm, data):
     plt.plot(sort(LA.eigh(W)[0]))
     plt.draw()
 
-
-def testBRBM():
+def testBRBM(nepochs=10):
     monitorInit()
     data = MNIST.data()
     rbm = BRBM(M=500, N=784)
@@ -1784,16 +2083,71 @@ def testBRBM():
     rbm.setAlgorithm('CD')
     rbm.sparsity['strength'] = 0.0
     rbm.sparsity['target'] = 0.05
-    print(rbm.train(data, 10,
+    rbm.init_learning_schedules(nepochs, init_lr=0.005, L2=(0.0, 0.0, 0.0), mom=0.0)
+    print(rbm.train(data, nepochs,
                     monitor = monitor))
 
-def testGRBM():
+
+def testBRBM2(nepochs=10):
+    monitorInit()
+    data = MNIST.data()
+    rbm = BRBM(M=500, N=784)
+    rbm.CDN = 5
+    rbm.setAlgorithm('CD')
+    rbm.sparsity['strength'] = 0.0
+    rbm.sparsity['target'] = 0.05
+    rbm.init_learning_schedules(nepochs, init_lr=0.005, L2=(0.0, 0.0, 0.0), mom=0.0)
+    print(rbm.train(data, nepochs,
+                    monitor = monitor))
+
+
+def monitorIGRBM(rbm, data):
+    img = tile_raster_images(rbm.W, (28,28), (int(ceil(float(rbm.M)/50)),50))
+    plt.subplot(3,1,1)
+    plt.imshow(img, animated=True, cmap=cm.gray)
+    #training_data = data.training.data
+    #print rbm.error_(training_data.reshape(len(training_data)/200, 200, training_data.shape[1]))
+    print rbm.error(rbm.processDat(data[0][0]))
+    #print sort(LA.svd(rbm.W)[1])
+    N, M = rbm.shape
+    W = concatenate((concatenate((zeros((N,N)), rbm.W), axis=1), 
+                     concatenate((rbm.W.T     , zeros((M,M))), axis=1)))
+    plt.subplot(3,1,2)
+    plt.plot(sort(LA.eigh(W)[0]))
+    plt.subplot(3,1,3)
+    plt.plot(sort(rbm.sigma))
+    plt.draw()
+
+def testIGRBM(nepochs = 20):
+    monitorInit()
+    data = MNIST.data()
+    rbm = IGRBM(M=500, N=784)
+    rbm.init_learning_schedules(nepochs, init_lr=0.001, L2=0.0, mom=0.0)
+    rbm.CDN = 1
+    rbm.setAlgorithm('PCD')
+    rbm.sparsity['strength'] = 0.0
+    rbm.sparsity['target'] = 0.05
+    print(rbm.train(data, nepochs, monitor = monitorIGRBM))
+
+def testBRBM_PCD(nepochs = 10):
+    monitorInit()
+    data = MNIST.data()
+    rbm = BRBM(M=500, N=784)
+    rbm.init_learning_schedules(nepochs, init_lr=0.005, L2=0.0, mom=0.0)
+    rbm.CDN = 1
+    rbm.setAlgorithm('CD')
+    rbm.sparsity['strength'] = 0.0
+    rbm.sparsity['target'] = 0.05
+    print(rbm.train(data, nepochs, monitor = monitor))
+
+def testGRBM(nepochs=10):
     monitorInit()
     data = MNIST.data()
     rbm = GRBM(M=100, N=784)
+    rbm.init_learning_schedules(nepochs, init_lr=0.005, L2=0.0, mom=0.0)
     #rbm.initWithData(data['training']['data'])
     rbm.sigma = 0.5*rbm.sigma
-    rbm.CDN = 1
+    rbm.CDN = 5
     rbm.setAlgorithm('CD')
     print(rbm.train(data, 50,
                     monitor = monitor))

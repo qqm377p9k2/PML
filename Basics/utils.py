@@ -4,8 +4,12 @@ import os
 from numpy_ import *
 
 def pickle(filename, object):
-    with gzip.open(filename, 'wb') as f:
-        cPickle.dump(object, f)
+    if filename[-3:] == '.gz':
+        with gzip.open(filename, 'wb') as f:
+            cPickle.dump(object, f)
+    else:
+        with open(filename, 'wb') as f:
+            cPickle.dump(object, f)
 
 def unpickle(filename):
     if filename[-3:] == '.gz':
@@ -36,7 +40,7 @@ class messages(object):
             print 'Done'
 
 class measuring_speed(messages):
-    def __init__(self, starting_message='Starting computation...', ending_message='Done in %g %ss',
+    def __init__(self, starting_message='Starting computation...', ending_message='Done in',
                  unit='sec', verbose=True):
         super(measuring_speed, self).__init__(starting_message, verbose)
         self.ending_message = ending_message
@@ -55,7 +59,7 @@ class measuring_speed(messages):
         self.timer = time.time() - self.timer
         self.obuffer[0] = self.timer
         if self.verbose:
-            print self.ending_message%(self.timer/self.norm, self.unit)
+            print self.ending_message +  (' %g %ss'%(self.timer/self.norm, self.unit))
     def __repr__(self):
         return 'Duration :%g [%ss]'%(self.timer/self.norm, self.unit)
     def float(self):
